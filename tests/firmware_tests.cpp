@@ -27,10 +27,10 @@ FirmwarePackage make_package()
     package.manifest.requiredPeripherals = {"GPIO", "SYSTICK"};
     package.bytecode.entryPoint = 0;
     package.bytecode.instructions = {
-        {Opcode::Nop, {}},
-        {Opcode::HalCall, {1, 2, 3, 4}},
+        {Opcode::HalCall, {1, 0, 13, 1}},
+        {Opcode::HalCall, {2, 0, 13, 1}},
         {Opcode::Wait, {100, 0, 0, 0}},
-        {Opcode::Halt, {}},
+        {Opcode::Jump, {1, 0, 0, 0}},
     };
     package.additionalSections.push_back({
         SectionType::Symbols,
@@ -54,6 +54,8 @@ void test_round_trip(const std::filesystem::path& vectorDirectory)
         "peripheral list did not round-trip");
     require(decoded.bytecode.instructions.size() == package.bytecode.instructions.size(),
         "instruction count did not round-trip");
+    require(decoded.bytecode.instructions[0].operands == Bytes({1, 0, 13, 1}),
+        "HAL_CALL operand layout did not round-trip");
     require(decoded.additionalSections.size() == 1, "additional section did not round-trip");
 
     std::filesystem::create_directories(vectorDirectory);
@@ -105,6 +107,18 @@ void test_rejects_invalid_package()
     package = make_package();
     package.bytecode.instructions[0] = {Opcode::Nop, {1}};
     require(!validate_firmware(package).valid, "invalid NOP operands should be rejected");
+
+    package = make_package();
+    package.bytecode.instructions[0] = {Opcode::HalCall, {0xFF, 0x00, 13, 1}};
+    require(!validate_firmware(package).valid, "unknown HAL service should be rejected");
+
+    package = make_package();
+    package.bytecode.instructions[0] = {Opcode::HalCall, {1, 0, 13, 2}};
+    require(!validate_firmware(package).valid, "invalid pin mode should be rejected");
+
+    package = make_package();
+    package.bytecode.instructions[0] = {Opcode::Load, {0, 1}};
+    require(!validate_firmware(package).valid, "LOAD slot outside VM memory should be rejected");
 }
 
 } // namespace

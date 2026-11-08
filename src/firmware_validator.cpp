@@ -58,8 +58,10 @@ ValidationResult validate_firmware(const FirmwarePackage& package)
         if ((rawFlags & ~kKnownSectionFlags) != 0) {
             return ValidationResult::failure("section contains unknown flags");
         }
-        if ((rawFlags & static_cast<std::uint32_t>(SectionFlags::Required)) != 0 &&
-            static_cast<std::uint32_t>(section.type) > static_cast<std::uint32_t>(SectionType::Debug)) {
+        const auto sectionType = static_cast<std::uint32_t>(section.type);
+        const auto knownSectionType = sectionType >= static_cast<std::uint32_t>(SectionType::ConstantPool) &&
+            sectionType <= static_cast<std::uint32_t>(SectionType::Debug);
+        if ((rawFlags & static_cast<std::uint32_t>(SectionFlags::Required)) != 0 && !knownSectionType) {
             return ValidationResult::failure("required section type is unknown");
         }
     }
@@ -83,6 +85,13 @@ ValidationResult validate_firmware(const FirmwarePackage& package)
             instruction.operands.size() != 2) {
             return ValidationResult::failure("LOAD and STORE must have a two-byte slot index");
         }
+        if (instruction.opcode == Opcode::Load || instruction.opcode == Opcode::Store) {
+            const auto slot = static_cast<std::uint16_t>(instruction.operands[0]) |
+                (static_cast<std::uint16_t>(instruction.operands[1]) << 8);
+            if (slot >= 256) {
+                return ValidationResult::failure("LOAD/STORE slot index exceeds VM memory");
+            }
+        }
         if ((instruction.opcode == Opcode::Jump || instruction.opcode == Opcode::JumpIf ||
              instruction.opcode == Opcode::Call || instruction.opcode == Opcode::Wait) &&
             instruction.operands.size() != 4) {
@@ -90,6 +99,21 @@ ValidationResult validate_firmware(const FirmwarePackage& package)
         }
         if (instruction.opcode == Opcode::HalCall && instruction.operands.size() != 4) {
             return ValidationResult::failure("HAL_CALL must have four operand bytes");
+        }
+        if (instruction.opcode == Opcode::HalCall) {
+            const auto service = static_cast<std::uint16_t>(instruction.operands[0]) |
+                (static_cast<std::uint16_t>(instruction.operands[1]) << 8);
+            const auto value = instruction.operands[3];
+            if (service < static_cast<std::uint16_t>(HalService::PinMode) ||
+                service > static_cast<std::uint16_t>(HalService::Millis)) {
+                return ValidationResult::failure("HAL_CALL contains an unknown service ID");
+            }
+            if (service == static_cast<std::uint16_t>(HalService::PinMode) && value > 1) {
+                return ValidationResult::failure("HAL PinMode value must be Input(0) or Output(1)");
+            }
+            if (service == static_cast<std::uint16_t>(HalService::DigitalWrite) && value > 1) {
+                return ValidationResult::failure("HAL DigitalWrite value must be 0 or 1");
+            }
         }
         if (instruction.opcode == Opcode::Jump || instruction.opcode == Opcode::JumpIf ||
             instruction.opcode == Opcode::Call) {
