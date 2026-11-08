@@ -1,0 +1,11 @@
+/build/
+/out/
+/toolchains/
+/external/llvm-project/build/
+/external/llvm-project/install/
+*.user
+*.suo
+*.vcxproj.user
+.cache/
+.idea/
+.vs/
