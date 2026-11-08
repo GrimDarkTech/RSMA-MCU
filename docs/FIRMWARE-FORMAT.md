@@ -49,6 +49,44 @@ Manifest должен описывать:
 
 Фактический wire format должен быть бинарным и иметь фиксированные integer widths, endian rule и границы секций. JSON выше является только человекочитаемым представлением metadata.
 
+### RSFW v1 wire layout
+
+Все целые числа имеют little-endian порядок байт. Размеры header и section entry фиксированы:
+
+```text
+Offset  Size  Field
+0       4     magic = "RSFW"
+4       2     header_size = 64
+6       2     format_major
+8       2     format_minor
+10      2     vm_version
+12      2     hal_version
+14      2     reserved
+16      4     package_flags
+20      4     section_count
+24      8     section_table_offset
+32      4     entry_point_instruction
+36      4     entry_point_section_type
+40      8     total_size
+48      4     payload_crc32
+52      4     header_crc32
+56      8     reserved
+```
+
+Каждая запись таблицы секций имеет 32 байта:
+
+```text
+Offset  Size  Field
+0       4     section_type
+4       4     section_flags
+8       8     payload_offset
+16      8     payload_size
+24      4     payload_crc32
+28      4     reserved
+```
+
+В v1 обязательны секции `Manifest` (type 1) и `Bytecode` (type 2). Payload checksum считается по конкатенации payload-секций в порядке таблицы. Header checksum считается по 64-байтовому header с нулевым `header_crc32`.
+
 ## 4. Bytecode
 
 Первый набор инструкций:
@@ -66,6 +104,8 @@ HAL_CALL, TRAP, HALT
 ```
 
 Инструкции должны использовать числовые IDs, а не строки. Имена функций и исходные строки хранятся только в debug section.
+
+Текущая реализация v1 поддерживает базовый executable subset: `NOP`, `HALT`, `CONST_I32`, `LOAD`, `STORE`, `ADD_I32`, `SUB_I32`, `JUMP`, `JUMP_IF`, `CALL`, `RETURN`, `READ_TIME`, `WAIT` и `HAL_CALL`. Формат operand payload у каждой инструкции задается ее размером в bytecode stream; проверка допустимых размеров выполняется validator-ом.
 
 ## 5. Проверка до исполнения
 

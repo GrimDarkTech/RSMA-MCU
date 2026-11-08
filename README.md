@@ -45,7 +45,17 @@ cmake -S . -B build -DRSMA_MCU_BUILD_TESTS=OFF
 cmake --build build --config Release
 ```
 
-Пока сборка создает только проверочный инструмент `rsma-mcu-info`. Полная сборка bundled Clang/LLVM описана в [docs/BUILDING.md](docs/BUILDING.md) и выполняется отдельным bootstrap-шагом.
+Первый этап уже содержит `rsma-firmware-inspect`, writer/reader/validator `.rsfw` и CTest-проверки формата. Полная сборка bundled Clang/LLVM описана в [docs/BUILDING.md](docs/BUILDING.md) и выполняется отдельным bootstrap-шагом.
+
+Сгенерировать и проверить минимальный Blink-пакет:
+
+```powershell
+cmake -S . -B build-rsfw -DRSMA_MCU_BUILD_TESTS=ON
+cmake --build build-rsfw --config Release
+ctest --test-dir build-rsfw -C Release --output-on-failure
+build-rsfw\Release\rsma-firmware-inspect.exe --create-blink blink.rsfw
+build-rsfw\Release\rsma-firmware-inspect.exe blink.rsfw
+```
 
 ## LLVM и Clang
 
