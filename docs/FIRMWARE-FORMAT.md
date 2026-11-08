@@ -107,7 +107,7 @@ HAL_CALL, TRAP, HALT
 
 Текущая реализация v1 поддерживает базовый executable subset: `NOP`, `HALT`, `CONST_I32`, `LOAD`, `STORE`, `ADD_I32`, `SUB_I32`, `JUMP`, `JUMP_IF`, `CALL`, `RETURN`, `READ_TIME`, `WAIT` и `HAL_CALL`. Формат operand payload у каждой инструкции задается ее размером в bytecode stream; проверка допустимых размеров выполняется validator-ом.
 
-В v1 `JUMP`, `JUMP_IF` и `CALL` используют абсолютный индекс инструкции в 4-байтовом little-endian operand. `WAIT` содержит длительность в миллисекундах как `uint32`. VM предоставляет 256 слотов `LOAD`/`STORE`, адресуемых двухбайтовым индексом. `HAL_CALL` содержит ровно четыре байта: `service:uint16`, `argument:uint8`, `value:uint8`. HAL service IDs: `PinMode=1`, `DigitalWrite=2`, `DigitalRead=3`, `DelayMs=4`, `Millis=5`. Длинные задержки кодируются инструкцией `WAIT`; `DelayMs` ограничен 255 ms.
+В v1 `JUMP`, `JUMP_IF` и `CALL` используют абсолютный индекс инструкции в 4-байтовом little-endian operand. `WAIT` содержит длительность в миллисекундах как `uint32`. VM предоставляет 256 слотов `LOAD`/`STORE`, адресуемых двухбайтовым индексом. `HAL_CALL` содержит ровно четыре байта: `service:uint16`, `argument:uint8`, `value:uint8`. HAL service IDs: `PinMode=1`, `DigitalWrite=2`, `DigitalRead=3`, `DelayMs=4`, `Millis=5`, `ConfigurePin=6`. Для `ConfigurePin` value packed как `mode bit0`, `pull bits1..2` (`None=0`, `PullUp=1`, `PullDown=2`), `output type bit3` (`PushPull=0`, `OpenDrain=1`); остальные биты зарезервированы. Длинные задержки кодируются инструкцией `WAIT`; `DelayMs` ограничен 255 ms.
 
 ## 5. Проверка до исполнения
 

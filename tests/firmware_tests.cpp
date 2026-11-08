@@ -119,6 +119,16 @@ void test_rejects_invalid_package()
     package = make_package();
     package.bytecode.instructions[0] = {Opcode::Load, {0, 1}};
     require(!validate_firmware(package).valid, "LOAD slot outside VM memory should be rejected");
+
+    package = make_package();
+    package.bytecode.instructions[0] = {Opcode::HalCall, {6, 0, 7, 13}};
+    require(validate_firmware(package).valid, "packed ConfigurePin HAL call should be accepted");
+
+    package.bytecode.instructions[0] = {Opcode::HalCall, {6, 0, 7, 0x80}};
+    require(!validate_firmware(package).valid, "ConfigurePin reserved bits should be rejected");
+
+    package.bytecode.instructions[0] = {Opcode::HalCall, {6, 0, 7, 0x06}};
+    require(!validate_firmware(package).valid, "ConfigurePin invalid pull mode should be rejected");
 }
 
 } // namespace

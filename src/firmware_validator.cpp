@@ -105,7 +105,7 @@ ValidationResult validate_firmware(const FirmwarePackage& package)
                 (static_cast<std::uint16_t>(instruction.operands[1]) << 8);
             const auto value = instruction.operands[3];
             if (service < static_cast<std::uint16_t>(HalService::PinMode) ||
-                service > static_cast<std::uint16_t>(HalService::Millis)) {
+                service > static_cast<std::uint16_t>(HalService::ConfigurePin)) {
                 return ValidationResult::failure("HAL_CALL contains an unknown service ID");
             }
             if (service == static_cast<std::uint16_t>(HalService::PinMode) && value > 1) {
@@ -113,6 +113,10 @@ ValidationResult validate_firmware(const FirmwarePackage& package)
             }
             if (service == static_cast<std::uint16_t>(HalService::DigitalWrite) && value > 1) {
                 return ValidationResult::failure("HAL DigitalWrite value must be 0 or 1");
+            }
+            if (service == static_cast<std::uint16_t>(HalService::ConfigurePin) &&
+                ((value & 0xF0) != 0 || ((value >> 1) & 0x03) == 0x03)) {
+                return ValidationResult::failure("HAL ConfigurePin contains invalid configuration bits");
             }
         }
         if (instruction.opcode == Opcode::Jump || instruction.opcode == Opcode::JumpIf ||

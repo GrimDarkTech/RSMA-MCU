@@ -35,6 +35,7 @@ enum class HalService : std::uint16_t
     DigitalRead = 3,
     DelayMs = 4,
     Millis = 5,
+    ConfigurePin = 6,
 };
 
 constexpr std::string_view opcode_name(Opcode opcode)
