@@ -105,9 +105,11 @@ HAL_CALL, TRAP, HALT
 
 Инструкции должны использовать числовые IDs, а не строки. Имена функций и исходные строки хранятся только в debug section.
 
-Текущая реализация v1 поддерживает базовый executable subset: `NOP`, `HALT`, `CONST_I32`, `LOAD`, `STORE`, `ADD_I32`, `SUB_I32`, `JUMP`, `JUMP_IF`, `CALL`, `RETURN`, `READ_TIME`, `WAIT` и `HAL_CALL`. Формат operand payload у каждой инструкции задается ее размером в bytecode stream; проверка допустимых размеров выполняется validator-ом.
+Текущая реализация v1 поддерживает базовый executable subset: `NOP`, `HALT`, `CONST_I32`, `LOAD`, `STORE`, `ADD_I32`, `SUB_I32`, `JUMP`, `JUMP_IF`, `CALL`, `RETURN`, `READ_TIME`, `WAIT`, `ATTACH_IRQ`, `ENABLE_IRQ`, `DISABLE_IRQ`, `RETURN_IRQ` и `HAL_CALL`. Формат operand payload у каждой инструкции задается ее размером в bytecode stream; проверка допустимых размеров выполняется validator-ом.
 
 В v1 `JUMP`, `JUMP_IF` и `CALL` используют абсолютный индекс инструкции в 4-байтовом little-endian operand. `WAIT` содержит длительность в миллисекундах как `uint32`. VM предоставляет 256 слотов `LOAD`/`STORE`, адресуемых двухбайтовым индексом. `HAL_CALL` содержит ровно четыре байта: `service:uint16`, `argument:uint8`, `value:uint8`. HAL service IDs: `PinMode=1`, `DigitalWrite=2`, `DigitalRead=3`, `DelayMs=4`, `Millis=5`, `ConfigurePin=6`. Для `ConfigurePin` value packed как `mode bit0`, `pull bits1..2` (`None=0`, `PullUp=1`, `PullDown=2`), `output type bit3` (`PushPull=0`, `OpenDrain=1`); остальные биты зарезервированы. Длинные задержки кодируются инструкцией `WAIT`; `DelayMs` ограничен 255 ms.
+
+`ATTACH_IRQ` содержит шесть байт: `pin:uint8`, `edge_mask:uint8`, `target_instruction:uint32`. В `edge_mask` bit 0 означает rising, bit 1 — falling; target — абсолютный индекс инструкции обработчика. `ENABLE_IRQ` и `DISABLE_IRQ` не имеют operands. Edge events dispatch-ятся deferred FIFO в simulated timestamp order; `RETURN_IRQ` возвращает VM к прерванному instruction/wait state. Входные события GPIO также timestamped и стабильно упорядочены по `(timestamp, insertion_sequence)`. `VirtualButton` моделирует active-low input: press переводит линию в `0`, release — в `1`; повторная установка текущего уровня не генерирует edge.
 
 ## 5. Проверка до исполнения
 

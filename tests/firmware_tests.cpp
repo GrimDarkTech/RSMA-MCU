@@ -129,6 +129,18 @@ void test_rejects_invalid_package()
 
     package.bytecode.instructions[0] = {Opcode::HalCall, {6, 0, 7, 0x06}};
     require(!validate_firmware(package).valid, "ConfigurePin invalid pull mode should be rejected");
+
+    package.bytecode.instructions[0] = {Opcode::AttachIrq, {7, 3, 2, 0, 0, 0}};
+    require(validate_firmware(package).valid, "valid ATTACH_IRQ should be accepted");
+
+    package.bytecode.instructions[0] = {Opcode::AttachIrq, {7, 0, 2, 0, 0, 0}};
+    require(!validate_firmware(package).valid, "ATTACH_IRQ without an edge should be rejected");
+
+    package.bytecode.instructions[0] = {Opcode::AttachIrq, {7, 1, 0xFF, 0xFF, 0, 0}};
+    require(!validate_firmware(package).valid, "ATTACH_IRQ outside bytecode should be rejected");
+
+    package.bytecode.instructions[0] = {Opcode::ReturnIrq, {1}};
+    require(!validate_firmware(package).valid, "RETURN_IRQ operands should be rejected");
 }
 
 } // namespace

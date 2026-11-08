@@ -22,6 +22,10 @@ enum class Opcode : std::uint8_t
     ReadTime = 0x0B,
     Wait = 0x0C,
     HalCall = 0x0D,
+    AttachIrq = 0x0E,
+    EnableIrq = 0x0F,
+    DisableIrq = 0x10,
+    ReturnIrq = 0x11,
 };
 
 constexpr std::uint16_t kBytecodeVersion = 1;
@@ -55,6 +59,10 @@ constexpr std::string_view opcode_name(Opcode opcode)
     case Opcode::ReadTime: return "READ_TIME";
     case Opcode::Wait: return "WAIT";
     case Opcode::HalCall: return "HAL_CALL";
+    case Opcode::AttachIrq: return "ATTACH_IRQ";
+    case Opcode::EnableIrq: return "ENABLE_IRQ";
+    case Opcode::DisableIrq: return "DISABLE_IRQ";
+    case Opcode::ReturnIrq: return "RETURN_IRQ";
     }
     return "UNKNOWN";
 }

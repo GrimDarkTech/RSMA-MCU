@@ -22,6 +22,10 @@ bool is_known_opcode(Opcode opcode)
     case Opcode::ReadTime:
     case Opcode::Wait:
     case Opcode::HalCall:
+    case Opcode::AttachIrq:
+    case Opcode::EnableIrq:
+    case Opcode::DisableIrq:
+    case Opcode::ReturnIrq:
         return true;
     }
     return false;
@@ -78,6 +82,12 @@ ValidationResult validate_firmware(const FirmwarePackage& package)
                 return ValidationResult::failure("operandless instruction has operands");
             }
         }
+        if (instruction.opcode == Opcode::EnableIrq || instruction.opcode == Opcode::DisableIrq ||
+            instruction.opcode == Opcode::ReturnIrq) {
+            if (!instruction.operands.empty()) {
+                return ValidationResult::failure("IRQ control instruction has operands");
+            }
+        }
         if (instruction.opcode == Opcode::ConstI32 && instruction.operands.size() != 4) {
             return ValidationResult::failure("CONST_I32 must have four operand bytes");
         }
@@ -99,6 +109,22 @@ ValidationResult validate_firmware(const FirmwarePackage& package)
         }
         if (instruction.opcode == Opcode::HalCall && instruction.operands.size() != 4) {
             return ValidationResult::failure("HAL_CALL must have four operand bytes");
+        }
+        if (instruction.opcode == Opcode::AttachIrq) {
+            if (instruction.operands.size() != 6) {
+                return ValidationResult::failure("ATTACH_IRQ must have six operand bytes");
+            }
+            const auto edgeMask = instruction.operands[1];
+            if ((edgeMask & 0x03u) == 0 || (edgeMask & 0xFCu) != 0) {
+                return ValidationResult::failure("ATTACH_IRQ contains an invalid edge mask");
+            }
+            const auto target = static_cast<std::uint32_t>(instruction.operands[2]) |
+                (static_cast<std::uint32_t>(instruction.operands[3]) << 8) |
+                (static_cast<std::uint32_t>(instruction.operands[4]) << 16) |
+                (static_cast<std::uint32_t>(instruction.operands[5]) << 24);
+            if (target >= package.bytecode.instructions.size()) {
+                return ValidationResult::failure("ATTACH_IRQ target is outside instruction list");
+            }
         }
         if (instruction.opcode == Opcode::HalCall) {
             const auto service = static_cast<std::uint16_t>(instruction.operands[0]) |
