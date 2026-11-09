@@ -131,7 +131,7 @@ ValidationResult validate_firmware(const FirmwarePackage& package)
                 (static_cast<std::uint16_t>(instruction.operands[1]) << 8);
             const auto value = instruction.operands[3];
             if (service < static_cast<std::uint16_t>(HalService::PinMode) ||
-                service > static_cast<std::uint16_t>(HalService::ConfigurePin)) {
+                service > static_cast<std::uint16_t>(HalService::PwmWrite)) {
                 return ValidationResult::failure("HAL_CALL contains an unknown service ID");
             }
             if (service == static_cast<std::uint16_t>(HalService::PinMode) && value > 1) {

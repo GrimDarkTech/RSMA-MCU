@@ -40,6 +40,7 @@ enum class HalService : std::uint16_t
     DelayMs = 4,
     Millis = 5,
     ConfigurePin = 6,
+    PwmWrite = 7,
 };
 
 constexpr std::string_view opcode_name(Opcode opcode)

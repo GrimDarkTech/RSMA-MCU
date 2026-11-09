@@ -124,6 +124,13 @@ void test_rejects_invalid_package()
     package.bytecode.instructions[0] = {Opcode::HalCall, {6, 0, 7, 13}};
     require(validate_firmware(package).valid, "packed ConfigurePin HAL call should be accepted");
 
+    package.bytecode.instructions[0] = {Opcode::HalCall,
+        {static_cast<Byte>(HalService::PwmWrite), 0, 7, 128}};
+    require(validate_firmware(package).valid, "PWM HAL call should be accepted");
+
+    package.bytecode.instructions[0] = {Opcode::HalCall, {8, 0, 7, 128}};
+    require(!validate_firmware(package).valid, "unknown HAL service should be rejected");
+
     package.bytecode.instructions[0] = {Opcode::HalCall, {6, 0, 7, 0x80}};
     require(!validate_firmware(package).valid, "ConfigurePin reserved bits should be rejected");
 
