@@ -12,6 +12,12 @@
 F:\RSMA-Refactored\rsma-mcu\examples\pwm_motor_test.cpp
 ```
 
+Для UART доступен минимальный echo-пример:
+
+```text
+F:\RSMA-Refactored\rsma-mcu\examples\uart_echo.cpp
+```
+
 Она предназначена для подключения:
 
 ```text
@@ -43,6 +49,13 @@ New-Item -ItemType Directory -Force `
 
 build\Release\rsma-pwm-motor-test.exe `
   F:\RSMA-Refactored\RSMA\Assets\Resources\RSMA\Firmware\pwm_motor_test.rsfw.bytes
+```
+
+Собрать UART echo firmware:
+
+```powershell
+build\Release\rsma-uart-echo.exe `
+  F:\RSMA-Refactored\RSMA\Assets\Resources\RSMA\Firmware\uart_echo.rsfw.bytes
 ```
 
 Проверить созданный пакет:
@@ -167,6 +180,10 @@ hal(HalService::PwmWrite, 13, 128)
 | 5 | `Millis` | не используется | игнорируется; результат попадает в VM stack |
 | 6 | `ConfigurePin` | virtual pin | packed mode/pull/output type |
 | 7 | `PwmWrite` | virtual pin | duty `0..255` |
+| 8 | `UartBegin` | port `0..3` | baud preset `0..4` |
+| 9 | `UartAvailable` | port `0..3` | RX byte count on VM stack |
+| 10 | `UartRead` | port `0..3` | next RX byte on VM stack |
+| 11 | `UartWrite` | port `0..3` | byte consumed from VM stack |
 
 Детальное описание wire format находится в [FIRMWARE-FORMAT.md](FIRMWARE-FORMAT.md).
 

@@ -41,6 +41,10 @@ enum class HalService : std::uint16_t
     Millis = 5,
     ConfigurePin = 6,
     PwmWrite = 7,
+    UartBegin = 8,
+    UartAvailable = 9,
+    UartRead = 10,
+    UartWrite = 11,
 };
 
 constexpr std::string_view opcode_name(Opcode opcode)

@@ -131,7 +131,7 @@ ValidationResult validate_firmware(const FirmwarePackage& package)
                 (static_cast<std::uint16_t>(instruction.operands[1]) << 8);
             const auto value = instruction.operands[3];
             if (service < static_cast<std::uint16_t>(HalService::PinMode) ||
-                service > static_cast<std::uint16_t>(HalService::PwmWrite)) {
+                service > static_cast<std::uint16_t>(HalService::UartWrite)) {
                 return ValidationResult::failure("HAL_CALL contains an unknown service ID");
             }
             if (service == static_cast<std::uint16_t>(HalService::PinMode) && value > 1) {
@@ -143,6 +143,17 @@ ValidationResult validate_firmware(const FirmwarePackage& package)
             if (service == static_cast<std::uint16_t>(HalService::ConfigurePin) &&
                 ((value & 0xF0) != 0 || ((value >> 1) & 0x03) == 0x03)) {
                 return ValidationResult::failure("HAL ConfigurePin contains invalid configuration bits");
+            }
+            if (service >= static_cast<std::uint16_t>(HalService::UartBegin)) {
+                if (instruction.operands[2] >= 4) {
+                    return ValidationResult::failure("HAL UART port is outside the supported range");
+                }
+                if (service == static_cast<std::uint16_t>(HalService::UartBegin) && value >= 5) {
+                    return ValidationResult::failure("HAL UART baud rate preset is unsupported");
+                }
+                if (service != static_cast<std::uint16_t>(HalService::UartBegin) && value != 0) {
+                    return ValidationResult::failure("HAL UART reserved value must be zero");
+                }
             }
         }
         if (instruction.opcode == Opcode::Jump || instruction.opcode == Opcode::JumpIf ||

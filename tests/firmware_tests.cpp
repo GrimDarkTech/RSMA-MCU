@@ -128,7 +128,35 @@ void test_rejects_invalid_package()
         {static_cast<Byte>(HalService::PwmWrite), 0, 7, 128}};
     require(validate_firmware(package).valid, "PWM HAL call should be accepted");
 
-    package.bytecode.instructions[0] = {Opcode::HalCall, {8, 0, 7, 128}};
+    package.bytecode.instructions[0] = {Opcode::HalCall,
+        {static_cast<Byte>(HalService::UartBegin), 0, 0, 4}};
+    require(validate_firmware(package).valid, "UART begin HAL call should be accepted");
+
+    package.bytecode.instructions[0] = {Opcode::HalCall,
+        {static_cast<Byte>(HalService::UartAvailable), 0, 3, 0}};
+    require(validate_firmware(package).valid, "UART available HAL call should be accepted");
+
+    package.bytecode.instructions[0] = {Opcode::HalCall,
+        {static_cast<Byte>(HalService::UartRead), 0, 0, 0}};
+    require(validate_firmware(package).valid, "UART read HAL call should be accepted");
+
+    package.bytecode.instructions[0] = {Opcode::HalCall,
+        {static_cast<Byte>(HalService::UartWrite), 0, 0, 0}};
+    require(validate_firmware(package).valid, "UART write HAL call should be accepted");
+
+    package.bytecode.instructions[0] = {Opcode::HalCall,
+        {static_cast<Byte>(HalService::UartBegin), 0, 4, 0}};
+    require(!validate_firmware(package).valid, "UART port outside range should be rejected");
+
+    package.bytecode.instructions[0] = {Opcode::HalCall,
+        {static_cast<Byte>(HalService::UartBegin), 0, 0, 5}};
+    require(!validate_firmware(package).valid, "UART baud preset outside range should be rejected");
+
+    package.bytecode.instructions[0] = {Opcode::HalCall,
+        {static_cast<Byte>(HalService::UartRead), 0, 0, 1}};
+    require(!validate_firmware(package).valid, "UART read reserved value should be rejected");
+
+    package.bytecode.instructions[0] = {Opcode::HalCall, {12, 0, 7, 128}};
     require(!validate_firmware(package).valid, "unknown HAL service should be rejected");
 
     package.bytecode.instructions[0] = {Opcode::HalCall, {6, 0, 7, 0x80}};
