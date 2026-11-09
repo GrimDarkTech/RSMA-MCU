@@ -34,12 +34,17 @@ if(RSMA_MCU_BUILD_TOOLS)
     add_executable(rsma-firmware-inspect tools/rsma_firmware_inspect.cpp)
     target_link_libraries(rsma-firmware-inspect PRIVATE rsma_mcu_core)
 
+    add_executable(rsma-pwm-motor-test examples/pwm_motor_test.cpp)
+    target_link_libraries(rsma-pwm-motor-test PRIVATE rsma_mcu_core)
+
     if(MSVC)
         target_compile_options(rsma-mcu-info PRIVATE /W4 /permissive-)
         target_compile_options(rsma-firmware-inspect PRIVATE /W4 /permissive-)
+        target_compile_options(rsma-pwm-motor-test PRIVATE /W4 /permissive-)
     else()
         target_compile_options(rsma-mcu-info PRIVATE -Wall -Wextra -Wpedantic)
         target_compile_options(rsma-firmware-inspect PRIVATE -Wall -Wextra -Wpedantic)
+        target_compile_options(rsma-pwm-motor-test PRIVATE -Wall -Wextra -Wpedantic)
     endif()
 endif()
 

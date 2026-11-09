@@ -53,6 +53,92 @@ rsma_mcu::FirmwarePackage make_button_irq_package()
     return package;
 }
 
+rsma_mcu::FirmwarePackage make_pwm_motor_test_package()
+{
+    using namespace rsma_mcu;
+
+    constexpr auto hal = [](HalService service, std::uint8_t pin, std::uint8_t value) {
+        const auto id = static_cast<std::uint16_t>(service);
+        return Bytes{
+            static_cast<Byte>(id), static_cast<Byte>(id >> 8), pin, value};
+    };
+    constexpr auto wait = [](std::uint32_t milliseconds) {
+        return Bytes{
+            static_cast<Byte>(milliseconds), static_cast<Byte>(milliseconds >> 8),
+            static_cast<Byte>(milliseconds >> 16), static_cast<Byte>(milliseconds >> 24)};
+    };
+    constexpr auto jump = [](std::uint32_t instruction) {
+        return Bytes{
+            static_cast<Byte>(instruction), static_cast<Byte>(instruction >> 8),
+            static_cast<Byte>(instruction >> 16), static_cast<Byte>(instruction >> 24)};
+    };
+
+    FirmwarePackage package;
+    package.manifest.boardId = "RSMA-STM32F103";
+    package.manifest.flashSize = 64 * 1024;
+    package.manifest.ramSize = 20 * 1024;
+    package.manifest.entryPointName = "reset";
+    package.manifest.requiredPeripherals = {"GPIO", "SYSTICK", "TIM"};
+    package.bytecode.entryPoint = 0;
+    package.bytecode.instructions = {
+        // Configure motor direction pins 10/11 and the shared PWM pin 13.
+        {Opcode::HalCall, hal(HalService::PinMode, 10, 1)},
+        {Opcode::HalCall, hal(HalService::PinMode, 11, 1)},
+        {Opcode::HalCall, hal(HalService::PinMode, 13, 1)},
+
+        // Stop, then run forward with duty 64/128/192/255.
+        {Opcode::HalCall, hal(HalService::DigitalWrite, 10, 0)}, // 3
+        {Opcode::HalCall, hal(HalService::DigitalWrite, 11, 0)}, // 4
+        {Opcode::HalCall, hal(HalService::PwmWrite, 13, 0)},     // 5
+        {Opcode::Wait, wait(500)},                               // 6
+        {Opcode::HalCall, hal(HalService::DigitalWrite, 10, 1)}, // 7
+        {Opcode::HalCall, hal(HalService::DigitalWrite, 11, 0)}, // 8
+        {Opcode::HalCall, hal(HalService::PwmWrite, 13, 64)},    // 9
+        {Opcode::Wait, wait(500)},                               // 10
+        {Opcode::HalCall, hal(HalService::PwmWrite, 13, 128)},   // 11
+        {Opcode::Wait, wait(500)},                               // 12
+        {Opcode::HalCall, hal(HalService::PwmWrite, 13, 192)},   // 13
+        {Opcode::Wait, wait(500)},                               // 14
+        {Opcode::HalCall, hal(HalService::PwmWrite, 13, 255)},   // 15
+        {Opcode::Wait, wait(1000)},                              // 16
+        {Opcode::HalCall, hal(HalService::PwmWrite, 13, 192)},   // 17
+        {Opcode::Wait, wait(500)},                               // 18
+        {Opcode::HalCall, hal(HalService::PwmWrite, 13, 128)},   // 19
+        {Opcode::Wait, wait(500)},                               // 20
+        {Opcode::HalCall, hal(HalService::PwmWrite, 13, 64)},    // 21
+        {Opcode::Wait, wait(500)},                               // 22
+        {Opcode::HalCall, hal(HalService::PwmWrite, 13, 0)},     // 23
+        {Opcode::Wait, wait(500)},                               // 24
+
+        // Stop, reverse direction, then run backward with the same PWM ramp.
+        {Opcode::HalCall, hal(HalService::DigitalWrite, 10, 0)}, // 25
+        {Opcode::HalCall, hal(HalService::DigitalWrite, 11, 1)}, // 26
+        {Opcode::HalCall, hal(HalService::PwmWrite, 13, 64)},    // 27
+        {Opcode::Wait, wait(500)},                               // 28
+        {Opcode::HalCall, hal(HalService::PwmWrite, 13, 128)},   // 29
+        {Opcode::Wait, wait(500)},                               // 30
+        {Opcode::HalCall, hal(HalService::PwmWrite, 13, 192)},   // 31
+        {Opcode::Wait, wait(500)},                               // 32
+        {Opcode::HalCall, hal(HalService::PwmWrite, 13, 255)},   // 33
+        {Opcode::Wait, wait(1000)},                              // 34
+        {Opcode::HalCall, hal(HalService::PwmWrite, 13, 192)},   // 35
+        {Opcode::Wait, wait(500)},                               // 36
+        {Opcode::HalCall, hal(HalService::PwmWrite, 13, 128)},   // 37
+        {Opcode::Wait, wait(500)},                               // 38
+        {Opcode::HalCall, hal(HalService::PwmWrite, 13, 64)},    // 39
+        {Opcode::Wait, wait(500)},                               // 40
+        {Opcode::HalCall, hal(HalService::PwmWrite, 13, 0)},     // 41
+        {Opcode::Wait, wait(500)},                               // 42
+
+        // Leave both direction inputs low before starting the next cycle.
+        {Opcode::HalCall, hal(HalService::DigitalWrite, 10, 0)}, // 43
+        {Opcode::HalCall, hal(HalService::DigitalWrite, 11, 0)}, // 44
+        {Opcode::Wait, wait(1000)},                               // 45
+        {Opcode::Jump, jump(3)},                                  // 46
+    };
+    return package;
+}
+
 void print_package(const rsma_mcu::FirmwarePackage& package)
 {
     using namespace rsma_mcu;
@@ -81,7 +167,8 @@ int usage()
     std::cerr << "Usage:\n"
               << "  rsma-firmware-inspect <file.rsfw>\n"
               << "  rsma-firmware-inspect --create-blink <file.rsfw>\n"
-              << "  rsma-firmware-inspect --create-button-irq <file.rsfw>\n";
+              << "  rsma-firmware-inspect --create-button-irq <file.rsfw>\n"
+              << "  rsma-firmware-inspect --create-pwm-motor-test <file.rsfw>\n";
     return 2;
 }
 
@@ -102,6 +189,12 @@ int main(int argc, char** argv)
         }
         if (argc == 3 && std::string(argv[1]) == "--create-button-irq") {
             const auto package = make_button_irq_package();
+            rsma_mcu::write_firmware(package, argv[2]);
+            std::cout << "Created " << argv[2] << '\n';
+            return 0;
+        }
+        if (argc == 3 && std::string(argv[1]) == "--create-pwm-motor-test") {
+            const auto package = make_pwm_motor_test_package();
             rsma_mcu::write_firmware(package, argv[2]);
             std::cout << "Created " << argv[2] << '\n';
             return 0;

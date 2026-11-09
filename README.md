@@ -35,7 +35,7 @@ RSMA peripheral and signal backends
 - общий контракт для EmulatorBackend и HitlBackend;
 - тестовый сценарий `Blink -> Button -> Interrupt -> PWM -> UART`.
 
-Подробные решения находятся в [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/FIRMWARE-FORMAT.md](docs/FIRMWARE-FORMAT.md) и [docs/DEVELOPMENT-PLAN.md](docs/DEVELOPMENT-PLAN.md).
+Подробные решения находятся в [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/FIRMWARE-FORMAT.md](docs/FIRMWARE-FORMAT.md), [docs/FIRMWARE-BUILDING.md](docs/FIRMWARE-BUILDING.md) и [docs/DEVELOPMENT-PLAN.md](docs/DEVELOPMENT-PLAN.md). Практический пример PWM-драйвера находится в [examples/pwm_motor_test.cpp](examples/pwm_motor_test.cpp).
 
 ## Сборка
 
