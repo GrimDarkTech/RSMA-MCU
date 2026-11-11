@@ -45,6 +45,22 @@ cmake -S . -B build -DRSMA_MCU_BUILD_TESTS=OFF
 cmake --build build --config Release
 ```
 
+Для Clang-based `rsma-build` включите builder и тесты (нужна установленная
+libclang; путь к toolchain можно задать через `LLVM_INSTALL_PREFIX`):
+
+```powershell
+cmake -S . -B build-builder `
+  -DRSMA_MCU_BUILD_TOOLS=ON `
+  -DRSMA_MCU_BUILD_TESTS=ON `
+  -DRSMA_MCU_BUILD_BUILDER=ON `
+  -DLLVM_INSTALL_PREFIX="C:/Program Files/LLVM"
+cmake --build build-builder --config Release
+ctest --test-dir build-builder -C Release --output-on-failure
+build-builder\Release\rsma-build.exe tests\fixtures\blink_main.cpp -o blink.rsfw
+```
+
+Поддерживаемый исходный subset описан в [docs/SOURCE-LANGUAGE.md](docs/SOURCE-LANGUAGE.md).
+
 Первый этап уже содержит `rsma-firmware-inspect`, writer/reader/validator `.rsfw` и CTest-проверки формата. Полная сборка bundled Clang/LLVM описана в [docs/BUILDING.md](docs/BUILDING.md) и выполняется отдельным bootstrap-шагом.
 
 Сгенерировать и проверить минимальный Blink-пакет:

@@ -41,6 +41,12 @@ cmake -S . -B build -DRSMA_MCU_BUILD_TOOLS=ON -DRSMA_MCU_BUILD_TESTS=ON
 cmake --build build --config Release --target rsma-pwm-motor-test rsma-firmware-inspect
 ```
 
+Для включения C++ frontend `rsma-build` используйте configure option
+`-DRSMA_MCU_BUILD_BUILDER=ON`. Нужны заголовки и библиотека libclang; если они
+установлены не в стандартном пути, задайте `-DLLVM_INSTALL_PREFIX=<каталог LLVM>`.
+Первый срез принимает только конструкции, перечисленные в
+[SOURCE-LANGUAGE.md](SOURCE-LANGUAGE.md).
+
 Создать прошивку в Unity Resources:
 
 ```powershell
