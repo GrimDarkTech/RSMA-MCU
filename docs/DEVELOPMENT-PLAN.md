@@ -13,6 +13,8 @@
 ## Этап 1. Builder и формат
 
 - Реализовать C++ CLI `rsma-build` как отдельный target.
+- Зафиксировать исходную точку входа как единственную функцию `int main()` без автоматических `setup()`/`loop()`.
+- Контракт исходного языка: [SOURCE-LANGUAGE.md](SOURCE-LANGUAGE.md).
 - Подключить Clang/LLVM frontend через bundled submodule.
 - Ограничить первую версию языка: integer/float/bool, функции, условия, циклы, статическая память.
 - Определить бинарный `.rsfw`, section table, checksum и validator.
