@@ -97,6 +97,7 @@ Offset  Size  Field
 NOP, CONST, LOAD, STORE
 ADD, SUB, MUL, DIV, NEG
 CMP_EQ, CMP_NE, CMP_LT, CMP_LE, CMP_GT, CMP_GE
+CMP_EQ, CMP_NE, CMP_LT, CMP_LE, CMP_GT, CMP_GE
 JUMP, JUMP_IF, CALL, RETURN
 LOAD_MEM, STORE_MEM
 READ_TIME, WAIT, YIELD
@@ -107,7 +108,7 @@ HAL_CALL, TRAP, HALT
 
 Инструкции должны использовать числовые IDs, а не строки. Имена функций и исходные строки хранятся только в debug section.
 
-Текущая реализация v1 поддерживает базовый executable subset: `NOP`, `HALT`, `CONST_I32`, `LOAD`, `STORE`, `ADD_I32`, `SUB_I32`, `JUMP`, `JUMP_IF`, `CALL`, `RETURN`, `READ_TIME`, `WAIT`, `ATTACH_IRQ`, `ENABLE_IRQ`, `DISABLE_IRQ`, `RETURN_IRQ` и `HAL_CALL`. Формат operand payload у каждой инструкции задается ее размером в bytecode stream; проверка допустимых размеров выполняется validator-ом.
+Текущая реализация v1 поддерживает базовый executable subset: `NOP`, `HALT`, `CONST_I32`, `LOAD`, `STORE`, `ADD_I32`, `SUB_I32`, `CMP_EQ_I32`, `CMP_NE_I32`, `CMP_LT_I32`, `CMP_LE_I32`, `CMP_GT_I32`, `CMP_GE_I32`, `JUMP`, `JUMP_IF`, `CALL`, `RETURN`, `READ_TIME`, `WAIT`, `ATTACH_IRQ`, `ENABLE_IRQ`, `DISABLE_IRQ`, `RETURN_IRQ` и `HAL_CALL`. Сравнения снимают два `int32` со стека, помещают `1` или `0`; порядок операндов для несимметричных сравнений: `left`, затем `right`. Формат operand payload у каждой инструкции задается ее размером в bytecode stream; проверка допустимых размеров выполняется validator-ом.
 
 В v1 `JUMP`, `JUMP_IF` и `CALL` используют абсолютный индекс инструкции в 4-байтовом little-endian operand. `WAIT` содержит длительность в миллисекундах как `uint32`. VM предоставляет 256 слотов `LOAD`/`STORE`, адресуемых двухбайтовым индексом. `HAL_CALL` содержит ровно четыре байта: `service:uint16`, `argument:uint8`, `value:uint8`. HAL service IDs: `PinMode=1`, `DigitalWrite=2`, `DigitalRead=3`, `DelayMs=4`, `Millis=5`, `ConfigurePin=6`, `PwmWrite=7`, `UartBegin=8`, `UartAvailable=9`, `UartRead=10`, `UartWrite=11`. Для `ConfigurePin` value packed как `mode bit0`, `pull bits1..2` (`None=0`, `PullUp=1`, `PullDown=2`), `output type bit3` (`PushPull=0`, `OpenDrain=1`); остальные биты зарезервированы. `PwmWrite` задаёт 8-битный duty cycle `0..255` в аргументе `value`; virtual/legacy GPIO представляет его как нормализованное значение `0..1` для компонентов сцены. UART поддерживает четыре порта и пять baud presets (`9600`, `19200`, `38400`, `57600`, `115200`); `UartAvailable` и `UartRead` помещают результат на VM stack, а `UartWrite` снимает байт со stack. Каждый RX FIFO имеет ёмкость 256 байт. Длинные задержки кодируются инструкцией `WAIT`; `DelayMs` ограничен 255 ms.
 

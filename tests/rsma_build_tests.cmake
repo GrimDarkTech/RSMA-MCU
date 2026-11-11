@@ -50,7 +50,7 @@ execute_process(
 if(NOT control_inspect_result EQUAL 0)
     message(FATAL_ERROR "constant control-flow package failed validation:\n${control_inspect_stderr}")
 endif()
-foreach(required_text "Instructions: 3" "[0] HAL_CALL" "[1] WAIT" "[2] JUMP")
+foreach(required_text "HAL_CALL" "WAIT" "JUMP" "CMP_EQ_I32")
     string(FIND "${control_inspect_stdout}" "${required_text}" text_index)
     if(text_index EQUAL -1)
         message(FATAL_ERROR "constant-control-flow package is missing '${required_text}':\n${control_inspect_stdout}")
@@ -74,9 +74,38 @@ endif()
 if(EXISTS "${runtime_condition_output}")
     message(FATAL_ERROR "rsma-build left a package after rejecting a runtime condition")
 endif()
-if(NOT "${condition_stderr}" MATCHES "compile-time integer constant")
+string(FIND "${condition_stderr}" "only digitalRead() may be used as a value expression" condition_message_index)
+if(condition_message_index EQUAL -1)
     message(FATAL_ERROR "runtime condition did not receive a useful diagnostic:\n${condition_stderr}")
 endif()
+
+foreach(fixture IN ITEMS "runtime_gpio_condition.cpp" "runtime_while.cpp")
+    set(runtime_output "${OUTPUT_DIR}/${fixture}.rsfw")
+    execute_process(
+        COMMAND "${RSMA_BUILD}" "${SOURCE_DIR}/${fixture}" -o "${runtime_output}"
+        RESULT_VARIABLE runtime_result
+        OUTPUT_VARIABLE runtime_stdout
+        ERROR_VARIABLE runtime_stderr
+    )
+    if(NOT runtime_result EQUAL 0)
+        message(FATAL_ERROR "rsma-build rejected ${fixture}:\n${runtime_stdout}\n${runtime_stderr}")
+    endif()
+    execute_process(
+        COMMAND "${RSMA_INSPECT}" "${runtime_output}"
+        RESULT_VARIABLE runtime_inspect_result
+        OUTPUT_VARIABLE runtime_inspect_stdout
+        ERROR_VARIABLE runtime_inspect_stderr
+    )
+    if(NOT runtime_inspect_result EQUAL 0)
+        message(FATAL_ERROR "${fixture} produced invalid bytecode:\n${runtime_inspect_stderr}")
+    endif()
+    foreach(required_text "HAL_CALL" "CMP_EQ_I32" "JUMP_IF")
+        string(FIND "${runtime_inspect_stdout}" "${required_text}" text_index)
+        if(text_index EQUAL -1)
+            message(FATAL_ERROR "${fixture} is missing '${required_text}':\n${runtime_inspect_stdout}")
+        endif()
+    endforeach()
+endforeach()
 
 set(invalid_output "${OUTPUT_DIR}/unsupported.rsfw")
 execute_process(

@@ -9,6 +9,7 @@ extern "C" {
 
 void pinMode(int pin, int mode);
 void digitalWrite(int pin, int value);
+int digitalRead(int pin);
 void delay(unsigned int milliseconds);
 
 }

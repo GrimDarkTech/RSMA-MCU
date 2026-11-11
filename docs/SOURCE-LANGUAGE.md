@@ -26,13 +26,13 @@ int main()
 целые числа, числа с плавающей точкой и логические значения; функции; условия;
 циклы; статическая память. Первый исполняемый срез `rsma-build` уже использует
 Clang для разбора C++, но пока принимает в `main()` только прямые вызовы
-`pinMode(pin, INPUT|OUTPUT)`, `digitalWrite(pin, LOW|HIGH)`, `delay(constant)`
-и `return [constant]`. Также поддерживаются compile-time условия `if/else` и
-`while`: ветвь `if` выбирается на этапе сборки; условие `while` должно быть
-константным (цикл с истинным условием компилируется в body и обратный `JUMP`,
-с ложным — удаляется). Аргументы HAL должны быть compile-time константами в
-диапазоне параметра. Runtime conditions, `for`/`do-while`, переменные,
-определения helper-функций, `digitalRead`, PWM и UART пока отклоняются с
+`pinMode(pin, INPUT|OUTPUT)`, `digitalWrite(pin, LOW|HIGH)`, `digitalRead(pin)`,
+`delay(constant)` и `return [constant]`. Поддерживаются локальные `int`/`bool`
+переменные, простые присваивания, сложение/вычитание, сравнения `==`, `!=`, `<`,
+`<=`, `>`, `>=`, логическое `!`, а также runtime `if/else` и `while`. Runtime
+условия понижаются в stack bytecode, comparisons — в opcodes `CMP_*_I32`.
+Аргументы pin/mode/delay HAL должны оставаться compile-time константами. `for`,
+`do-while`, helper-функции, статическая память, PWM и UART пока отклоняются с
 диагностикой; неполная прошивка не создаётся.
 
 Для сборки target `rsma-build` включается опцией

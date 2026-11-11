@@ -26,6 +26,12 @@ bool is_known_opcode(Opcode opcode)
     case Opcode::EnableIrq:
     case Opcode::DisableIrq:
     case Opcode::ReturnIrq:
+    case Opcode::CmpEqI32:
+    case Opcode::CmpNeI32:
+    case Opcode::CmpLtI32:
+    case Opcode::CmpLeI32:
+    case Opcode::CmpGtI32:
+    case Opcode::CmpGeI32:
         return true;
     }
     return false;
@@ -77,6 +83,9 @@ ValidationResult validate_firmware(const FirmwarePackage& package)
         }
         if (instruction.opcode == Opcode::Nop || instruction.opcode == Opcode::Halt ||
             instruction.opcode == Opcode::AddI32 || instruction.opcode == Opcode::SubI32 ||
+            instruction.opcode == Opcode::CmpEqI32 || instruction.opcode == Opcode::CmpNeI32 ||
+            instruction.opcode == Opcode::CmpLtI32 || instruction.opcode == Opcode::CmpLeI32 ||
+            instruction.opcode == Opcode::CmpGtI32 || instruction.opcode == Opcode::CmpGeI32 ||
             instruction.opcode == Opcode::Return || instruction.opcode == Opcode::ReadTime) {
             if (!instruction.operands.empty()) {
                 return ValidationResult::failure("operandless instruction has operands");

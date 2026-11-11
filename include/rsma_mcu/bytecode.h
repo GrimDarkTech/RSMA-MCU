@@ -26,6 +26,12 @@ enum class Opcode : std::uint8_t
     EnableIrq = 0x0F,
     DisableIrq = 0x10,
     ReturnIrq = 0x11,
+    CmpEqI32 = 0x12,
+    CmpNeI32 = 0x13,
+    CmpLtI32 = 0x14,
+    CmpLeI32 = 0x15,
+    CmpGtI32 = 0x16,
+    CmpGeI32 = 0x17,
 };
 
 constexpr std::uint16_t kBytecodeVersion = 1;
@@ -68,6 +74,12 @@ constexpr std::string_view opcode_name(Opcode opcode)
     case Opcode::EnableIrq: return "ENABLE_IRQ";
     case Opcode::DisableIrq: return "DISABLE_IRQ";
     case Opcode::ReturnIrq: return "RETURN_IRQ";
+    case Opcode::CmpEqI32: return "CMP_EQ_I32";
+    case Opcode::CmpNeI32: return "CMP_NE_I32";
+    case Opcode::CmpLtI32: return "CMP_LT_I32";
+    case Opcode::CmpLeI32: return "CMP_LE_I32";
+    case Opcode::CmpGtI32: return "CMP_GT_I32";
+    case Opcode::CmpGeI32: return "CMP_GE_I32";
     }
     return "UNKNOWN";
 }

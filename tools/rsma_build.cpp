@@ -125,6 +125,163 @@ struct ResolvedFunction
     std::string name;
 };
 
+ResolvedFunction resolve_called_function(CXCursor call);
+bool is_builtin_hal_declaration(CXCursor declaration);
+
+struct BodyContext
+{
+    BytecodeProgram* program;
+    std::vector<std::string>* peripherals;
+    std::vector<std::pair<CXCursor, std::uint16_t>> locals;
+    std::uint16_t nextSlot = 0;
+    bool terminated = false;
+    std::exception_ptr failure;
+};
+
+CXChildVisitResult lower_statement(CXCursor cursor, CXCursor parent, CXClientData clientData);
+
+std::uint32_t current_instruction(const BodyContext& context)
+{
+    if (context.program->instructions.size() >= kMaxInstructionCount) {
+        throw FirmwareError("bytecode instruction limit exceeded");
+    }
+    return static_cast<std::uint32_t>(context.program->instructions.size());
+}
+
+std::uint16_t local_slot(CXCursor declaration, BodyContext& context)
+{
+    for (const auto& local : context.locals) {
+        if (clang_equalCursors(local.first, declaration)) return local.second;
+    }
+    fail_at(declaration, "variable is not a supported local in main()");
+}
+
+void emit_const(BytecodeProgram& program, std::int32_t value)
+{
+    Bytes operands;
+    append_u32(operands, static_cast<std::uint32_t>(value));
+    program.instructions.push_back({Opcode::ConstI32, std::move(operands)});
+}
+
+void emit_slot(BytecodeProgram& program, Opcode opcode, std::uint16_t slot)
+{
+    program.instructions.push_back({opcode, {
+        static_cast<Byte>(slot), static_cast<Byte>(slot >> 8),
+    }});
+}
+
+std::vector<CXCursor> cursor_children(CXCursor cursor)
+{
+    CallChildren children;
+    clang_visitChildren(cursor, collect_call_children, &children);
+    return std::move(children.cursors);
+}
+
+void emit_expression(CXCursor cursor, BodyContext& context)
+{
+    const auto kind = clang_getCursorKind(cursor);
+    if (kind == CXCursor_IntegerLiteral || kind == CXCursor_CXXBoolLiteralExpr ||
+        kind == CXCursor_CharacterLiteral) {
+        const auto value = constant_integer(cursor);
+        if (value < std::numeric_limits<std::int32_t>::min() ||
+            value > std::numeric_limits<std::int32_t>::max()) {
+            fail_at(cursor, "integer expression is outside the VM int32 range");
+        }
+        emit_const(*context.program, static_cast<std::int32_t>(value));
+        return;
+    }
+    if (kind == CXCursor_DeclRefExpr) {
+        const auto declaration = clang_getCursorReferenced(cursor);
+        if (clang_Cursor_isNull(declaration)) fail_at(cursor, "unresolved variable reference");
+        emit_slot(*context.program, Opcode::Load, local_slot(declaration, context));
+        return;
+    }
+    if (kind == CXCursor_ParenExpr || kind == CXCursor_UnexposedExpr) {
+        const auto children = cursor_children(cursor);
+        if (children.size() != 1) fail_at(cursor, "unsupported expression wrapper");
+        emit_expression(children.front(), context);
+        return;
+    }
+    if (kind == CXCursor_CallExpr) {
+        const auto function = resolve_called_function(cursor);
+        if (function.name != "digitalRead" || !is_builtin_hal_declaration(function.declaration)) {
+            fail_at(cursor, "only digitalRead() may be used as a value expression");
+        }
+        if (clang_Cursor_getNumArguments(cursor) != 1) fail_at(cursor, "digitalRead expects one argument");
+        const auto pin = constant_integer(clang_Cursor_getArgument(cursor, 0));
+        if (pin < 0 || pin > std::numeric_limits<Byte>::max()) {
+            fail_at(clang_Cursor_getArgument(cursor, 0), "pin must be between 0 and 255");
+        }
+        append_hal_call(*context.program, HalService::DigitalRead, static_cast<Byte>(pin), 0);
+        context.peripherals->emplace_back("GPIO");
+        return;
+    }
+    if (kind == CXCursor_UnaryOperator) {
+        const auto children = cursor_children(cursor);
+        if (children.size() != 1) fail_at(cursor, "unsupported unary expression");
+        const auto operation = ClangString(clang_getUnaryOperatorKindSpelling(
+            clang_getCursorUnaryOperatorKind(cursor))).str();
+        if (operation == "!") {
+            emit_expression(children.front(), context);
+            emit_const(*context.program, 0);
+            context.program->instructions.push_back({Opcode::CmpEqI32, {}});
+            return;
+        }
+        if (operation == "-") {
+            emit_const(*context.program, 0);
+            emit_expression(children.front(), context);
+            context.program->instructions.push_back({Opcode::SubI32, {}});
+            return;
+        }
+        fail_at(cursor, "unsupported unary operator '" + operation + "'");
+    }
+    if (kind == CXCursor_BinaryOperator) {
+        const auto children = cursor_children(cursor);
+        if (children.size() != 2) fail_at(cursor, "unsupported binary expression");
+        emit_expression(children[0], context);
+        emit_expression(children[1], context);
+        const auto operation = clang_getCursorBinaryOperatorKind(cursor);
+        Opcode opcode;
+        switch (operation) {
+        case CXBinaryOperator_Add: opcode = Opcode::AddI32; break;
+        case CXBinaryOperator_Sub: opcode = Opcode::SubI32; break;
+        case CXBinaryOperator_EQ: opcode = Opcode::CmpEqI32; break;
+        case CXBinaryOperator_NE: opcode = Opcode::CmpNeI32; break;
+        case CXBinaryOperator_LT: opcode = Opcode::CmpLtI32; break;
+        case CXBinaryOperator_LE: opcode = Opcode::CmpLeI32; break;
+        case CXBinaryOperator_GT: opcode = Opcode::CmpGtI32; break;
+        case CXBinaryOperator_GE: opcode = Opcode::CmpGeI32; break;
+        default:
+            fail_at(cursor, "unsupported binary operator '" +
+                ClangString(clang_getBinaryOperatorKindSpelling(operation)).str() + "'");
+        }
+        context.program->instructions.push_back({opcode, {}});
+        return;
+    }
+    fail_at(cursor, "unsupported value expression");
+}
+
+void emit_jump(BytecodeProgram& program, Opcode opcode, std::uint32_t target)
+{
+    Bytes operands;
+    append_u32(operands, target);
+    program.instructions.push_back({opcode, std::move(operands)});
+}
+
+void patch_jump_target(BytecodeInstruction& instruction, std::uint32_t target);
+
+std::size_t emit_jump_placeholder(BytecodeProgram& program, Opcode opcode)
+{
+    const auto index = program.instructions.size();
+    program.instructions.push_back({opcode, Bytes(4, 0)});
+    return index;
+}
+
+void patch_jump(BytecodeProgram& program, std::size_t instruction, std::uint32_t target)
+{
+    patch_jump_target(program.instructions.at(instruction), target);
+}
+
 ResolvedFunction resolve_called_function(CXCursor call)
 {
     const auto referenced = clang_getCursorReferenced(call);
@@ -163,12 +320,13 @@ bool is_builtin_hal_declaration(CXCursor declaration)
     return normalized_path(declarationPath) == normalized_path(RSMA_MCU_ARDUINO_HEADER);
 }
 
-void lower_call(CXCursor cursor, BytecodeProgram& program,
-    std::vector<std::string>& peripherals)
+void lower_call(CXCursor cursor, BodyContext& context)
 {
+    auto& program = *context.program;
+    auto& peripherals = *context.peripherals;
     const auto function = resolve_called_function(cursor);
     const auto& name = function.name;
-    if (name != "pinMode" && name != "digitalWrite" && name != "delay") {
+    if (name != "pinMode" && name != "digitalWrite" && name != "digitalRead" && name != "delay") {
         fail_at(cursor, "unsupported function call '" + (name.empty() ? std::string("<unknown>") : name) + "'");
     }
     if (!is_builtin_hal_declaration(function.declaration)) {
@@ -207,6 +365,12 @@ void lower_call(CXCursor cursor, BytecodeProgram& program,
         peripherals.emplace_back("GPIO");
         return;
     }
+    if (name == "digitalRead") {
+        if (argumentCount != 1) fail_at(cursor, "digitalRead expects one argument");
+        append_hal_call(program, HalService::DigitalRead, byteArgument(0, "pin"), 0);
+        peripherals.emplace_back("GPIO");
+        return;
+    }
     if (name == "delay") {
         if (argumentCount != 1) fail_at(cursor, "delay expects one argument");
         const auto milliseconds = constant_integer(argument(0));
@@ -222,20 +386,12 @@ void lower_call(CXCursor cursor, BytecodeProgram& program,
 
 }
 
-struct BodyContext
-{
-    BytecodeProgram* program;
-    std::vector<std::string>* peripherals;
-    bool terminated = false;
-    std::exception_ptr failure;
-};
-
-CXChildVisitResult lower_statement(CXCursor cursor, CXCursor parent, CXClientData clientData);
-
 void lower_selected_statement(CXCursor cursor, BodyContext& context)
 {
     if (clang_getCursorKind(cursor) == CXCursor_CompoundStmt) {
+        const auto localCount = context.locals.size();
         clang_visitChildren(cursor, lower_statement, &context);
+        context.locals.resize(localCount);
     } else {
         lower_statement(cursor, clang_getNullCursor(), &context);
     }
@@ -261,8 +417,41 @@ CXChildVisitResult lower_statement(CXCursor cursor, CXCursor, CXClientData clien
     try {
         switch (clang_getCursorKind(cursor)) {
         case CXCursor_CallExpr:
-            lower_call(cursor, *context.program, *context.peripherals);
+            lower_call(cursor, context);
             return CXChildVisit_Continue;
+        case CXCursor_DeclStmt:
+            return CXChildVisit_Recurse;
+        case CXCursor_VarDecl: {
+            if (clang_Cursor_getStorageClass(cursor) != CX_SC_None) {
+                fail_at(cursor, "static and extern local variables are not supported");
+            }
+            const auto typeName = ClangString(clang_getTypeSpelling(clang_getCursorType(cursor))).str();
+            if (typeName != "int" && typeName != "bool") {
+                fail_at(cursor, "local variables currently support only int and bool");
+            }
+            if (context.nextSlot >= 256) fail_at(cursor, "VM supports at most 256 local variables");
+            const auto slot = context.nextSlot++;
+            context.locals.emplace_back(cursor, slot);
+            const auto children = cursor_children(cursor);
+            if (children.empty()) emit_const(*context.program, 0);
+            else if (children.size() == 1) emit_expression(children.front(), context);
+            else fail_at(cursor, "unsupported local variable initializer");
+            emit_slot(*context.program, Opcode::Store, slot);
+            return CXChildVisit_Continue;
+        }
+        case CXCursor_BinaryOperator: {
+            if (clang_getCursorBinaryOperatorKind(cursor) != CXBinaryOperator_Assign) {
+                fail_at(cursor, "only simple local assignment is supported as a statement");
+            }
+            const auto children = cursor_children(cursor);
+            if (children.size() != 2 || clang_getCursorKind(children[0]) != CXCursor_DeclRefExpr) {
+                fail_at(cursor, "assignment target must be a local variable");
+            }
+            const auto declaration = clang_getCursorReferenced(children[0]);
+            emit_expression(children[1], context);
+            emit_slot(*context.program, Opcode::Store, local_slot(declaration, context));
+            return CXChildVisit_Continue;
+        }
         case CXCursor_ReturnStmt: {
             CallChildren children;
             clang_visitChildren(cursor, collect_call_children, &children);
@@ -279,7 +468,8 @@ CXChildVisitResult lower_statement(CXCursor cursor, CXCursor, CXClientData clien
         case CXCursor_NullStmt:
             return CXChildVisit_Continue;
         case CXCursor_CompoundStmt: {
-            return CXChildVisit_Recurse;
+            lower_selected_statement(cursor, context);
+            return CXChildVisit_Continue;
         }
         case CXCursor_IfStmt: {
             CallChildren children;
@@ -287,31 +477,50 @@ CXChildVisitResult lower_statement(CXCursor cursor, CXCursor, CXClientData clien
             if (children.cursors.size() < 2 || children.cursors.size() > 3) {
                 fail_at(cursor, "if statement form is not supported");
             }
-            const bool condition = constant_integer(children.cursors[0]) != 0;
-            const auto selected = condition ? children.cursors[1]
-                : (children.cursors.size() == 3 ? children.cursors[2] : clang_getNullCursor());
-            if (!clang_Cursor_isNull(selected)) lower_selected_statement(selected, context);
+            emit_expression(children.cursors[0], context);
+            emit_const(*context.program, 0);
+            context.program->instructions.push_back({Opcode::CmpEqI32, {}});
+            const auto elseJump = emit_jump_placeholder(*context.program, Opcode::JumpIf);
+            const bool wasTerminated = context.terminated;
+            lower_selected_statement(children.cursors[1], context);
+            const bool thenTerminated = context.terminated;
+            context.terminated = wasTerminated;
+            if (children.cursors.size() == 3) {
+                const auto endJump = thenTerminated
+                    ? std::numeric_limits<std::size_t>::max()
+                    : emit_jump_placeholder(*context.program, Opcode::Jump);
+                patch_jump(*context.program, elseJump, current_instruction(context));
+                lower_selected_statement(children.cursors[2], context);
+                const bool elseTerminated = context.terminated;
+                if (endJump != std::numeric_limits<std::size_t>::max()) {
+                    patch_jump(*context.program, endJump, current_instruction(context));
+                }
+                context.terminated = thenTerminated && elseTerminated;
+            } else {
+                patch_jump(*context.program, elseJump, current_instruction(context));
+                context.terminated = wasTerminated;
+            }
             return CXChildVisit_Continue;
         }
         case CXCursor_WhileStmt: {
             CallChildren children;
             clang_visitChildren(cursor, collect_call_children, &children);
             if (children.cursors.size() != 2) fail_at(cursor, "while statement form is not supported");
-            if (constant_integer(children.cursors[0]) == 0) return CXChildVisit_Continue;
-
             const auto loopStart = static_cast<std::uint32_t>(context.program->instructions.size());
+            emit_expression(children.cursors[0], context);
+            emit_const(*context.program, 0);
+            context.program->instructions.push_back({Opcode::CmpEqI32, {}});
+            const auto exitJump = emit_jump_placeholder(*context.program, Opcode::JumpIf);
             lower_selected_statement(children.cursors[1], context);
-            if (!context.terminated) {
-                const auto jumpIndex = context.program->instructions.size();
-                context.program->instructions.push_back({Opcode::Jump, Bytes(4, 0)});
-                patch_jump_target(context.program->instructions[jumpIndex], loopStart);
-            }
-            context.terminated = true;
+            const bool bodyTerminated = context.terminated;
+            if (!bodyTerminated) emit_jump(*context.program, Opcode::Jump, loopStart);
+            patch_jump(*context.program, exitJump, current_instruction(context));
+            context.terminated = false;
             return CXChildVisit_Continue;
         }
         default:
             fail_at(cursor, "unsupported statement in main(); supported statements are HAL calls, "
-                "return, constant if/else, and constant while");
+                "locals, assignment, return, if/else, and while");
         }
     } catch (...) {
         context.failure = std::current_exception();
