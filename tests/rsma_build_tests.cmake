@@ -31,6 +31,53 @@ foreach(required_text "Entry: main (instruction 0)" "Instructions: 5" "HAL_CALL"
     endif()
 endforeach()
 
+set(control_output "${OUTPUT_DIR}/constant-control-flow.rsfw")
+execute_process(
+    COMMAND "${RSMA_BUILD}" "${SOURCE_DIR}/constant_control_flow.cpp" -o "${control_output}"
+    RESULT_VARIABLE control_result
+    OUTPUT_VARIABLE control_stdout
+    ERROR_VARIABLE control_stderr
+)
+if(NOT control_result EQUAL 0)
+    message(FATAL_ERROR "rsma-build rejected constant control flow:\n${control_stdout}\n${control_stderr}")
+endif()
+execute_process(
+    COMMAND "${RSMA_INSPECT}" "${control_output}"
+    RESULT_VARIABLE control_inspect_result
+    OUTPUT_VARIABLE control_inspect_stdout
+    ERROR_VARIABLE control_inspect_stderr
+)
+if(NOT control_inspect_result EQUAL 0)
+    message(FATAL_ERROR "constant control-flow package failed validation:\n${control_inspect_stderr}")
+endif()
+foreach(required_text "Instructions: 3" "[0] HAL_CALL" "[1] WAIT" "[2] JUMP")
+    string(FIND "${control_inspect_stdout}" "${required_text}" text_index)
+    if(text_index EQUAL -1)
+        message(FATAL_ERROR "constant-control-flow package is missing '${required_text}':\n${control_inspect_stdout}")
+    endif()
+endforeach()
+string(FIND "${control_inspect_stdout}" "Peripherals: GPIO SYSTICK" peripheral_index)
+if(peripheral_index EQUAL -1)
+    message(FATAL_ERROR "constant-control-flow package did not declare used peripherals:\n${control_inspect_stdout}")
+endif()
+
+set(runtime_condition_output "${OUTPUT_DIR}/runtime-condition.rsfw")
+execute_process(
+    COMMAND "${RSMA_BUILD}" "${SOURCE_DIR}/runtime_condition.cpp" -o "${runtime_condition_output}"
+    RESULT_VARIABLE condition_result
+    OUTPUT_VARIABLE condition_stdout
+    ERROR_VARIABLE condition_stderr
+)
+if(condition_result EQUAL 0)
+    message(FATAL_ERROR "rsma-build unexpectedly accepted a runtime condition")
+endif()
+if(EXISTS "${runtime_condition_output}")
+    message(FATAL_ERROR "rsma-build left a package after rejecting a runtime condition")
+endif()
+if(NOT "${condition_stderr}" MATCHES "compile-time integer constant")
+    message(FATAL_ERROR "runtime condition did not receive a useful diagnostic:\n${condition_stderr}")
+endif()
+
 set(invalid_output "${OUTPUT_DIR}/unsupported.rsfw")
 execute_process(
     COMMAND "${RSMA_BUILD}" "${SOURCE_DIR}/unsupported_loop.cpp" -o "${invalid_output}"

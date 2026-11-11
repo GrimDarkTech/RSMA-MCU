@@ -230,6 +230,29 @@ struct BodyContext
     std::exception_ptr failure;
 };
 
+CXChildVisitResult lower_statement(CXCursor cursor, CXCursor parent, CXClientData clientData);
+
+void lower_selected_statement(CXCursor cursor, BodyContext& context)
+{
+    if (clang_getCursorKind(cursor) == CXCursor_CompoundStmt) {
+        clang_visitChildren(cursor, lower_statement, &context);
+    } else {
+        lower_statement(cursor, clang_getNullCursor(), &context);
+    }
+    if (context.failure) std::rethrow_exception(context.failure);
+}
+
+void patch_jump_target(BytecodeInstruction& instruction, std::uint32_t target)
+{
+    if (instruction.operands.size() != 4) {
+        throw FirmwareError("internal compiler error: malformed jump placeholder");
+    }
+    instruction.operands[0] = static_cast<Byte>(target);
+    instruction.operands[1] = static_cast<Byte>(target >> 8);
+    instruction.operands[2] = static_cast<Byte>(target >> 16);
+    instruction.operands[3] = static_cast<Byte>(target >> 24);
+}
+
 CXChildVisitResult lower_statement(CXCursor cursor, CXCursor, CXClientData clientData)
 {
     auto& context = *static_cast<BodyContext*>(clientData);
@@ -258,8 +281,37 @@ CXChildVisitResult lower_statement(CXCursor cursor, CXCursor, CXClientData clien
         case CXCursor_CompoundStmt: {
             return CXChildVisit_Recurse;
         }
+        case CXCursor_IfStmt: {
+            CallChildren children;
+            clang_visitChildren(cursor, collect_call_children, &children);
+            if (children.cursors.size() < 2 || children.cursors.size() > 3) {
+                fail_at(cursor, "if statement form is not supported");
+            }
+            const bool condition = constant_integer(children.cursors[0]) != 0;
+            const auto selected = condition ? children.cursors[1]
+                : (children.cursors.size() == 3 ? children.cursors[2] : clang_getNullCursor());
+            if (!clang_Cursor_isNull(selected)) lower_selected_statement(selected, context);
+            return CXChildVisit_Continue;
+        }
+        case CXCursor_WhileStmt: {
+            CallChildren children;
+            clang_visitChildren(cursor, collect_call_children, &children);
+            if (children.cursors.size() != 2) fail_at(cursor, "while statement form is not supported");
+            if (constant_integer(children.cursors[0]) == 0) return CXChildVisit_Continue;
+
+            const auto loopStart = static_cast<std::uint32_t>(context.program->instructions.size());
+            lower_selected_statement(children.cursors[1], context);
+            if (!context.terminated) {
+                const auto jumpIndex = context.program->instructions.size();
+                context.program->instructions.push_back({Opcode::Jump, Bytes(4, 0)});
+                patch_jump_target(context.program->instructions[jumpIndex], loopStart);
+            }
+            context.terminated = true;
+            return CXChildVisit_Continue;
+        }
         default:
-            fail_at(cursor, "unsupported statement in main(); this compiler slice accepts HAL calls and return only");
+            fail_at(cursor, "unsupported statement in main(); supported statements are HAL calls, "
+                "return, constant if/else, and constant while");
         }
     } catch (...) {
         context.failure = std::current_exception();
