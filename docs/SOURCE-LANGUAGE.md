@@ -50,6 +50,12 @@ Clang для разбора C++, но пока принимает в `main()` т
 `LLVM_INSTALL_PREFIX`. Результат проходит тот же validator, что и остальные
 RSFW v1 пакеты.
 
+Builder добавляет optional read-only секции `Symbols` (`SYM1`) и `Debug` (`DBG1`).
+`SYM1` version 1 содержит пары `instruction:u32, name:utf8[length:u16]`; `DBG1`
+version 1 хранит `instruction:u32, name:utf8[length:u16], file:utf8[length:u16],
+line:u32`. Они описывают entry points глобальных функций и не требуются VM для
+исполнения.
+
 Frontend формирует существующий `FirmwarePackage` в формате RSFW v1. Физические
 MCU targets и их startup/runtime соглашения являются отдельными целями сборки и
 не изменяют контракт VM `main()`.

@@ -73,6 +73,25 @@ void append_u32(Bytes& bytes, std::uint32_t value)
     bytes.push_back(static_cast<Byte>(value >> 24));
 }
 
+void append_u16(Bytes& bytes, std::uint16_t value)
+{
+    bytes.push_back(static_cast<Byte>(value));
+    bytes.push_back(static_cast<Byte>(value >> 8));
+}
+
+void append_string(Bytes& bytes, const std::string& value)
+{
+    if (value.size() > std::numeric_limits<std::uint16_t>::max())
+        throw FirmwareError("symbol/debug string exceeds format limit");
+    append_u16(bytes, static_cast<std::uint16_t>(value.size()));
+    bytes.insert(bytes.end(), value.begin(), value.end());
+}
+
+void append_magic(Bytes& bytes, const char (&magic)[5])
+{
+    bytes.insert(bytes.end(), magic, magic + 4);
+}
+
 void append_hal_call(BytecodeProgram& program, HalService service, Byte argument, Byte value)
 {
     const auto id = static_cast<std::uint16_t>(service);
@@ -886,6 +905,29 @@ FirmwarePackage compile_source(const std::filesystem::path& sourcePath)
             if (!callerFound || !targetFound)
                 throw FirmwareError("internal compiler error: unresolved function call");
         }
+
+        Bytes symbols;
+        append_magic(symbols, "SYM1");
+        append_u16(symbols, 1);
+        append_u16(symbols, static_cast<std::uint16_t>(compiler.functionEntries.size()));
+        Bytes debug;
+        append_magic(debug, "DBG1");
+        append_u16(debug, 1);
+        append_u16(debug, static_cast<std::uint16_t>(compiler.functionEntries.size()));
+        for (const auto& entry : compiler.functionEntries) {
+            const auto name = ClangString(clang_getCursorSpelling(entry.first)).str();
+            append_u32(symbols, entry.second);
+            append_string(symbols, name);
+            append_u32(debug, entry.second);
+            append_string(debug, name);
+            CXFile file = nullptr;
+            unsigned line = 0;
+            clang_getSpellingLocation(clang_getCursorLocation(entry.first), &file, &line, nullptr, nullptr);
+            append_string(debug, file == nullptr ? std::string{} : ClangString(clang_getFileName(file)).str());
+            append_u32(debug, line);
+        }
+        package.additionalSections.push_back({SectionType::Symbols, SectionFlags::ReadOnly, std::move(symbols)});
+        package.additionalSections.push_back({SectionType::Debug, SectionFlags::ReadOnly, std::move(debug)});
 
         for (const auto& peripheral : peripherals) {
             if (std::find(package.manifest.requiredPeripherals.begin(),

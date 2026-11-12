@@ -1,10 +1,55 @@
 #include <cstdlib>
+#include <cstdint>
 #include <iostream>
 #include <string>
 
 #include "rsma_mcu/firmware_format.h"
 
 namespace {
+
+std::uint16_t read_u16(const rsma_mcu::Bytes& data, std::size_t& offset)
+{
+    if (offset + 2 > data.size()) throw rsma_mcu::FirmwareError("Malformed symbols section");
+    const auto value = static_cast<std::uint16_t>(data[offset] | (data[offset + 1] << 8));
+    offset += 2;
+    return value;
+}
+
+std::uint32_t read_u32(const rsma_mcu::Bytes& data, std::size_t& offset)
+{
+    if (offset + 4 > data.size()) throw rsma_mcu::FirmwareError("Malformed symbols section");
+    std::uint32_t value = 0;
+    for (unsigned byte = 0; byte < 4; ++byte)
+        value |= static_cast<std::uint32_t>(data[offset++]) << (byte * 8);
+    return value;
+}
+
+std::string read_string(const rsma_mcu::Bytes& data, std::size_t& offset)
+{
+    const auto length = read_u16(data, offset);
+    if (offset + length > data.size()) throw rsma_mcu::FirmwareError("Malformed symbols section");
+    const std::string value(data.begin() + static_cast<std::ptrdiff_t>(offset),
+        data.begin() + static_cast<std::ptrdiff_t>(offset + length));
+    offset += length;
+    return value;
+}
+
+void print_symbols(const rsma_mcu::FirmwareSection& section)
+{
+    const auto& data = section.data;
+    if (data.size() < 8 || data[0] != 'S' || data[1] != 'Y' || data[2] != 'M' || data[3] != '1')
+        throw rsma_mcu::FirmwareError("Malformed symbols section header");
+    std::size_t offset = 4;
+    if (read_u16(data, offset) != 1) throw rsma_mcu::FirmwareError("Unsupported symbols section version");
+    const auto count = read_u16(data, offset);
+    std::cout << "Symbols: " << count << '\n';
+    for (std::uint16_t index = 0; index < count; ++index) {
+        const auto address = read_u32(data, offset);
+        const auto name = read_string(data, offset);
+        std::cout << "  " << name << " = instruction " << address << '\n';
+    }
+    if (offset != data.size()) throw rsma_mcu::FirmwareError("Symbols section contains trailing bytes");
+}
 
 rsma_mcu::FirmwarePackage make_blink_package()
 {
@@ -160,6 +205,10 @@ void print_package(const rsma_mcu::FirmwarePackage& package)
     }
     std::cout << '\n';
     std::cout << "Additional sections: " << package.additionalSections.size() << '\n';
+    for (const auto& section : package.additionalSections) {
+        std::cout << "Section: " << section_type_name(section.type) << " (" << section.data.size() << " bytes)\n";
+        if (section.type == SectionType::Symbols) print_symbols(section);
+    }
 }
 
 int usage()

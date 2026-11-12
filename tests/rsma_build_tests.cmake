@@ -164,6 +164,12 @@ foreach(required_text "Entry: main (instruction 0)" "RETURN" "HALT")
         message(FATAL_ERROR "compiled functions are missing '${required_text}':\n${functions_inspect_stdout}")
     endif()
 endforeach()
+foreach(required_text "Section: Symbols" "Section: Debug" "Symbols: 3" "main = instruction 0" "get_level = instruction 8" "set_led = instruction 15")
+    string(FIND "${functions_inspect_stdout}" "${required_text}" symbol_index)
+    if(symbol_index EQUAL -1)
+        message(FATAL_ERROR "symbol/debug output is missing '${required_text}':\n${functions_inspect_stdout}")
+    endif()
+endforeach()
 
 set(recursive_output "${OUTPUT_DIR}/recursive.rsfw")
 execute_process(
