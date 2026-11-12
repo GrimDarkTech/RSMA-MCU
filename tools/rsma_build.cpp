@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <exception>
+#include <functional>
 #include <iostream>
 #include <limits>
 #include <string>
@@ -37,6 +38,7 @@ struct AstContext
 {
     CXCursor mainFunction = clang_getNullCursor();
     unsigned mainDefinitions = 0;
+    std::vector<CXCursor> functionDefinitions;
     std::exception_ptr failure;
 };
 
@@ -46,10 +48,12 @@ CXChildVisitResult find_main(CXCursor cursor, CXCursor, CXClientData clientData)
     try {
         if (clang_getCursorKind(cursor) == CXCursor_FunctionDecl &&
             clang_getCursorKind(clang_getCursorLexicalParent(cursor)) == CXCursor_TranslationUnit &&
-            ClangString(clang_getCursorSpelling(cursor)).str() == "main" &&
             clang_isCursorDefinition(cursor)) {
-            context.mainFunction = cursor;
-            ++context.mainDefinitions;
+            context.functionDefinitions.push_back(cursor);
+            if (ClangString(clang_getCursorSpelling(cursor)).str() == "main") {
+                context.mainFunction = cursor;
+                ++context.mainDefinitions;
+            }
         }
     } catch (...) {
         context.failure = std::current_exception();
@@ -125,13 +129,54 @@ struct ResolvedFunction
     std::string name;
 };
 
+struct PendingCall
+{
+    std::size_t instruction;
+    CXCursor target;
+    CXCursor caller;
+};
+
+struct CompileContext
+{
+    std::vector<CXCursor> functions;
+    std::vector<PendingCall> calls;
+    std::vector<std::pair<CXCursor, std::uint32_t>> functionEntries;
+};
+
 ResolvedFunction resolve_called_function(CXCursor call);
 bool is_builtin_hal_declaration(CXCursor declaration);
+std::vector<CXCursor> cursor_children(CXCursor cursor);
+
+CXCursor find_function_definition(CXCursor declaration, CompileContext& compiler)
+{
+    const auto definition = clang_getCursorDefinition(declaration);
+    for (const auto function : compiler.functions) {
+        if (clang_equalCursors(function, declaration) ||
+            (!clang_Cursor_isNull(definition) && clang_equalCursors(function, definition))) {
+            return function;
+        }
+    }
+    return clang_getNullCursor();
+}
+
+CXCursor function_body(CXCursor function)
+{
+    const auto children = cursor_children(function);
+    for (const auto child : children) {
+        if (clang_getCursorKind(child) == CXCursor_CompoundStmt) return child;
+    }
+    return clang_getNullCursor();
+}
 
 struct BodyContext
 {
     BytecodeProgram* program;
     std::vector<std::string>* peripherals;
+    CompileContext* compiler;
+    CXCursor function;
+    std::uint32_t functionEntry;
+    bool isMain;
+    bool returnsInt;
     std::vector<std::pair<CXCursor, std::uint16_t>> locals;
     std::uint16_t nextSlot = 0;
     bool terminated = false;
@@ -204,16 +249,31 @@ void emit_expression(CXCursor cursor, BodyContext& context)
     }
     if (kind == CXCursor_CallExpr) {
         const auto function = resolve_called_function(cursor);
-        if (function.name != "digitalRead" || !is_builtin_hal_declaration(function.declaration)) {
-            fail_at(cursor, "only digitalRead() may be used as a value expression");
+        if (function.name == "digitalRead") {
+            if (!is_builtin_hal_declaration(function.declaration))
+                fail_at(cursor, "HAL call must resolve to the declaration in <rsma_mcu/Arduino.h>");
+            if (clang_Cursor_getNumArguments(cursor) != 1) fail_at(cursor, "digitalRead expects one argument");
+            const auto pin = constant_integer(clang_Cursor_getArgument(cursor, 0));
+            if (pin < 0 || pin > std::numeric_limits<Byte>::max()) {
+                fail_at(clang_Cursor_getArgument(cursor, 0), "pin must be between 0 and 255");
+            }
+            append_hal_call(*context.program, HalService::DigitalRead, static_cast<Byte>(pin), 0);
+            context.peripherals->emplace_back("GPIO");
+            return;
         }
-        if (clang_Cursor_getNumArguments(cursor) != 1) fail_at(cursor, "digitalRead expects one argument");
-        const auto pin = constant_integer(clang_Cursor_getArgument(cursor, 0));
-        if (pin < 0 || pin > std::numeric_limits<Byte>::max()) {
-            fail_at(clang_Cursor_getArgument(cursor, 0), "pin must be between 0 and 255");
+        const auto target = find_function_definition(function.declaration, *context.compiler);
+        if (clang_Cursor_isNull(target)) {
+            fail_at(cursor, "call target '" + function.name + "' has no definition in this source");
         }
-        append_hal_call(*context.program, HalService::DigitalRead, static_cast<Byte>(pin), 0);
-        context.peripherals->emplace_back("GPIO");
+        if (clang_Cursor_getNumArguments(cursor) != 0) {
+            fail_at(cursor, "user-defined functions currently accept no arguments");
+        }
+        if (ClangString(clang_getTypeSpelling(clang_getCursorResultType(target))).str() != "int") {
+            fail_at(cursor, "void functions cannot be used as value expressions");
+        }
+        const auto instruction = context.program->instructions.size();
+        context.program->instructions.push_back({Opcode::Call, Bytes(4, 0)});
+        context.compiler->calls.push_back({instruction, target, context.function});
         return;
     }
     if (kind == CXCursor_UnaryOperator) {
@@ -346,11 +406,27 @@ void lower_call(CXCursor cursor, BodyContext& context)
     auto& peripherals = *context.peripherals;
     const auto function = resolve_called_function(cursor);
     const auto& name = function.name;
-    if (name != "pinMode" && name != "digitalWrite" && name != "digitalRead" && name != "delay") {
-        fail_at(cursor, "unsupported function call '" + (name.empty() ? std::string("<unknown>") : name) + "'");
-    }
-    if (!is_builtin_hal_declaration(function.declaration)) {
+    const bool halName = name == "pinMode" || name == "digitalWrite" ||
+        name == "digitalRead" || name == "delay";
+    if (halName && !is_builtin_hal_declaration(function.declaration)) {
         fail_at(cursor, "HAL call must resolve to the declaration in <rsma_mcu/Arduino.h>");
+    }
+    if (!halName) {
+        const auto target = find_function_definition(function.declaration, *context.compiler);
+        if (clang_Cursor_isNull(target)) {
+            fail_at(cursor, "call target '" + (name.empty() ? std::string("<unknown>") : name) +
+                "' has no definition in this source");
+        }
+        if (clang_Cursor_getNumArguments(cursor) != 0) {
+            fail_at(cursor, "user-defined functions currently accept no arguments");
+        }
+        if (ClangString(clang_getTypeSpelling(clang_getCursorResultType(target))).str() != "void") {
+            fail_at(cursor, "int-returning functions must be used as value expressions");
+        }
+        const auto instruction = program.instructions.size();
+        program.instructions.push_back({Opcode::Call, Bytes(4, 0)});
+        context.compiler->calls.push_back({instruction, target, context.function});
+        return;
     }
     const auto argumentCount = clang_Cursor_getNumArguments(cursor);
     auto argument = [&](int index) {
@@ -476,13 +552,18 @@ CXChildVisitResult lower_statement(CXCursor cursor, CXCursor, CXClientData clien
         case CXCursor_ReturnStmt: {
             CallChildren children;
             clang_visitChildren(cursor, collect_call_children, &children);
-            if (!children.cursors.empty()) {
-                const auto value = constant_integer(children.cursors.front());
-                if (value < std::numeric_limits<int>::min() || value > std::numeric_limits<int>::max()) {
-                    fail_at(cursor, "main return value is outside the int range");
-                }
+            if (context.isMain) {
+                if (!children.cursors.empty() && clang_getCursorKind(children.cursors.front()) == CXCursor_CallExpr)
+                    emit_expression(children.cursors.front(), context);
+                context.program->instructions.push_back({Opcode::Halt, {}});
+            } else if (context.returnsInt) {
+                if (children.cursors.size() != 1) fail_at(cursor, "int function must return a value");
+                emit_expression(children.cursors.front(), context);
+                context.program->instructions.push_back({Opcode::Return, {}});
+            } else {
+                if (!children.cursors.empty()) fail_at(cursor, "void function cannot return a value");
+                context.program->instructions.push_back({Opcode::Return, {}});
             }
-            context.program->instructions.push_back({Opcode::Halt, {}});
             context.terminated = true;
             return CXChildVisit_Continue;
         }
@@ -622,20 +703,37 @@ FirmwarePackage compile_source(const std::filesystem::path& sourcePath)
             throw FirmwareError("source must define exactly one global int main() function");
         }
         if (clang_Cursor_getNumArguments(ast.mainFunction) != 0 ||
-            ClangString(clang_getTypeSpelling(clang_getCursorResultType(ast.mainFunction))).str() != "int") {
+            ClangString(clang_getTypeSpelling(clang_getCursorResultType(ast.mainFunction))).str() != "int")
             fail_at(ast.mainFunction, "entry point must have signature int main() with no arguments");
-        }
 
-        CallChildren functionChildren;
-        clang_visitChildren(ast.mainFunction, collect_call_children, &functionChildren);
-        CXCursor body = clang_getNullCursor();
-        for (const auto child : functionChildren.cursors) {
-            if (clang_getCursorKind(child) == CXCursor_CompoundStmt) {
-                body = child;
-                break;
+        CompileContext compiler;
+        compiler.functions = std::move(ast.functionDefinitions);
+        std::sort(compiler.functions.begin(), compiler.functions.end(), [&](CXCursor left, CXCursor right) {
+            return clang_equalCursors(left, ast.mainFunction) && !clang_equalCursors(right, ast.mainFunction);
+        });
+
+        for (const auto function : compiler.functions) {
+            const auto name = ClangString(clang_getCursorSpelling(function)).str();
+            const auto result = ClangString(clang_getTypeSpelling(clang_getCursorResultType(function))).str();
+            if (name == "main" && !clang_equalCursors(function, ast.mainFunction))
+                fail_at(function, "multiple main() definitions are not supported");
+            if (name != "main" && result != "int" && result != "void")
+                fail_at(function, "user-defined functions must return int or void");
+            const bool reservedHalName = name == "pinMode" || name == "digitalWrite" ||
+                name == "digitalRead" || name == "delay";
+            if (!reservedHalName && clang_Cursor_getNumArguments(function) != 0)
+                fail_at(function, "user-defined functions currently accept no arguments");
+
+            const auto body = function_body(function);
+            if (clang_Cursor_isNull(body)) fail_at(function, "function definition has no body");
+            CallChildren bodyChildren;
+            clang_visitChildren(body, collect_call_children, &bodyChildren);
+            for (const auto child : bodyChildren.cursors) {
+                if (clang_getCursorKind(child) == CXCursor_DeclStmt ||
+                    clang_getCursorKind(child) == CXCursor_VarDecl)
+                    fail_at(child, "local variables in user-defined functions require stack frames and are not supported yet");
             }
         }
-        if (clang_Cursor_isNull(body)) fail_at(ast.mainFunction, "main() has no function body");
 
         FirmwarePackage package;
         package.manifest.boardId = "RSMA-STM32F103";
@@ -644,10 +742,58 @@ FirmwarePackage compile_source(const std::filesystem::path& sourcePath)
         package.manifest.entryPointName = "main";
         package.bytecode.entryPoint = 0;
         std::vector<std::string> peripherals;
-        BodyContext bodyContext{&package.bytecode, &peripherals};
-        clang_visitChildren(body, lower_statement, &bodyContext);
-        if (bodyContext.failure) std::rethrow_exception(bodyContext.failure);
-        if (!bodyContext.terminated) package.bytecode.instructions.push_back({Opcode::Halt, {}});
+        for (const auto function : compiler.functions) {
+            const auto name = ClangString(clang_getCursorSpelling(function)).str();
+            const bool isMain = name == "main";
+            const auto resultType = ClangString(clang_getTypeSpelling(clang_getCursorResultType(function))).str();
+            const auto entry = current_instruction(BodyContext{
+                &package.bytecode, &peripherals, &compiler, function,
+                static_cast<std::uint32_t>(package.bytecode.instructions.size()), isMain, resultType == "int"});
+            compiler.functionEntries.emplace_back(function, entry);
+            const auto body = function_body(function);
+            BodyContext bodyContext{
+                &package.bytecode, &peripherals, &compiler, function, entry, isMain, resultType == "int"};
+            clang_visitChildren(body, lower_statement, &bodyContext);
+            if (bodyContext.failure) std::rethrow_exception(bodyContext.failure);
+            if (!bodyContext.terminated) {
+                if (isMain) package.bytecode.instructions.push_back({Opcode::Halt, {}});
+                else if (resultType == "void") package.bytecode.instructions.push_back({Opcode::Return, {}});
+                else fail_at(function, "int function must return a value on every path");
+            }
+        }
+
+        for (const auto& pending : compiler.calls) {
+            for (const auto& entry : compiler.functionEntries) {
+                if (clang_equalCursors(entry.first, pending.target)) {
+                    patch_jump(package.bytecode, pending.instruction, entry.second);
+                    break;
+                }
+            }
+        }
+
+        std::vector<std::vector<std::size_t>> callGraph(compiler.functionEntries.size());
+        for (const auto& pending : compiler.calls) {
+            std::size_t callerIndex = compiler.functionEntries.size();
+            std::size_t targetIndex = compiler.functionEntries.size();
+            for (std::size_t i = 0; i < compiler.functionEntries.size(); ++i) {
+                if (clang_equalCursors(compiler.functionEntries[i].first, pending.caller)) callerIndex = i;
+                if (clang_equalCursors(compiler.functionEntries[i].first, pending.target)) targetIndex = i;
+            }
+            if (callerIndex == compiler.functionEntries.size() || targetIndex == compiler.functionEntries.size())
+                throw FirmwareError("internal compiler error: unresolved function call");
+            callGraph[callerIndex].push_back(targetIndex);
+        }
+        std::vector<unsigned char> visitState(callGraph.size(), 0);
+        std::function<void(std::size_t)> visitFunction = [&](std::size_t functionIndex) {
+            if (visitState[functionIndex] == 1)
+                fail_at(compiler.functionEntries[functionIndex].first,
+                    "recursive function calls are not supported until VM stack frames are implemented");
+            if (visitState[functionIndex] == 2) return;
+            visitState[functionIndex] = 1;
+            for (const auto target : callGraph[functionIndex]) visitFunction(target);
+            visitState[functionIndex] = 2;
+        };
+        for (std::size_t i = 0; i < callGraph.size(); ++i) visitFunction(i);
 
         for (const auto& peripheral : peripherals) {
             if (std::find(package.manifest.requiredPeripherals.begin(),

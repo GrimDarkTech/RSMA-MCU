@@ -74,7 +74,7 @@ endif()
 if(EXISTS "${runtime_condition_output}")
     message(FATAL_ERROR "rsma-build left a package after rejecting a runtime condition")
 endif()
-string(FIND "${condition_stderr}" "only digitalRead() may be used as a value expression" condition_message_index)
+string(FIND "${condition_stderr}" "call target 'read_switch' has no definition in this source" condition_message_index)
 if(condition_message_index EQUAL -1)
     message(FATAL_ERROR "runtime condition did not receive a useful diagnostic:\n${condition_stderr}")
 endif()
@@ -133,6 +133,52 @@ foreach(required_text "ADD_I32" "CMP_LT_I32" "JUMP_IF" "JUMP" "HALT")
     endif()
 endforeach()
 
+set(functions_output "${OUTPUT_DIR}/functions.rsfw")
+execute_process(
+    COMMAND "${RSMA_BUILD}" "${SOURCE_DIR}/functions.cpp" -o "${functions_output}"
+    RESULT_VARIABLE functions_result
+    OUTPUT_VARIABLE functions_stdout
+    ERROR_VARIABLE functions_stderr
+)
+if(NOT functions_result EQUAL 0)
+    message(FATAL_ERROR "rsma-build rejected supported functions:\n${functions_stdout}\n${functions_stderr}")
+endif()
+execute_process(
+    COMMAND "${RSMA_INSPECT}" "${functions_output}"
+    RESULT_VARIABLE functions_inspect_result
+    OUTPUT_VARIABLE functions_inspect_stdout
+    ERROR_VARIABLE functions_inspect_stderr
+)
+if(NOT functions_inspect_result EQUAL 0)
+    message(FATAL_ERROR "functions produced invalid bytecode:\n${functions_inspect_stderr}")
+endif()
+foreach(call_line "[1] CALL (4 operand bytes)" "[5] CALL (4 operand bytes)")
+    string(FIND "${functions_inspect_stdout}" "${call_line}" call_index)
+    if(call_index EQUAL -1)
+        message(FATAL_ERROR "expected function call '${call_line}':\n${functions_inspect_stdout}")
+    endif()
+endforeach()
+foreach(required_text "Entry: main (instruction 0)" "RETURN" "HALT")
+    string(FIND "${functions_inspect_stdout}" "${required_text}" text_index)
+    if(text_index EQUAL -1)
+        message(FATAL_ERROR "compiled functions are missing '${required_text}':\n${functions_inspect_stdout}")
+    endif()
+endforeach()
+
+set(recursive_output "${OUTPUT_DIR}/recursive.rsfw")
+execute_process(
+    COMMAND "${RSMA_BUILD}" "${SOURCE_DIR}/recursive_function.cpp" -o "${recursive_output}"
+    RESULT_VARIABLE recursive_result
+    OUTPUT_VARIABLE recursive_stdout
+    ERROR_VARIABLE recursive_stderr
+)
+if(recursive_result EQUAL 0 OR EXISTS "${recursive_output}")
+    message(FATAL_ERROR "rsma-build must reject recursive functions without writing firmware")
+endif()
+if(NOT "${recursive_stderr}" MATCHES "recursive function calls are not supported")
+    message(FATAL_ERROR "recursive call rejection has an unclear diagnostic:\n${recursive_stderr}")
+endif()
+
 set(invalid_output "${OUTPUT_DIR}/unsupported.rsfw")
 execute_process(
     COMMAND "${RSMA_BUILD}" "${SOURCE_DIR}/unsupported_loop.cpp" -o "${invalid_output}"
@@ -168,7 +214,6 @@ if(NOT "${dynamic_stderr}" MATCHES "compile-time integer constant")
 endif()
 
 foreach(fixture_and_message IN ITEMS
-        "arbitrary_call.cpp|unsupported function call 'helper'"
         "fake_hal.cpp|declaration in <rsma_mcu/Arduino.h>"
         "nested_call_expression.cpp|unsupported statement")
     string(REPLACE "|" ";" fixture_fields "${fixture_and_message}")
