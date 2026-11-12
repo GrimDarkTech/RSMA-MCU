@@ -98,6 +98,13 @@ void test_rejects_invalid_package()
 {
     auto package = make_package();
     package.bytecode.entryPoint = 100;
+
+    package = make_package();
+    package.bytecode.instructions[0] = {Opcode::Yield, {}};
+    require(validate_firmware(package).valid, "YIELD without operands should be accepted");
+
+    package.bytecode.instructions[0] = {Opcode::Yield, {1}};
+    require(!validate_firmware(package).valid, "YIELD operands should be rejected");
     require(!validate_firmware(package).valid, "invalid entry point should be rejected");
 
     package = make_package();

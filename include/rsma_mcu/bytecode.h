@@ -34,6 +34,7 @@ enum class Opcode : std::uint8_t
     CmpGeI32 = 0x17,
     GlobalLoad = 0x18,
     GlobalStore = 0x19,
+    Yield = 0x1A,
 };
 
 constexpr std::uint16_t kBytecodeVersion = 1;
@@ -84,6 +85,7 @@ constexpr std::string_view opcode_name(Opcode opcode)
     case Opcode::CmpGeI32: return "CMP_GE_I32";
     case Opcode::GlobalLoad: return "GLOBAL_LOAD";
     case Opcode::GlobalStore: return "GLOBAL_STORE";
+    case Opcode::Yield: return "YIELD";
     }
     return "UNKNOWN";
 }

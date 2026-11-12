@@ -470,7 +470,7 @@ void lower_call(CXCursor cursor, BodyContext& context)
     const auto function = resolve_called_function(cursor);
     const auto& name = function.name;
     const bool halName = name == "pinMode" || name == "digitalWrite" ||
-        name == "digitalRead" || name == "delay";
+        name == "digitalRead" || name == "delay" || name == "yield";
     if (halName && !is_builtin_hal_declaration(function.declaration)) {
         fail_at(cursor, "HAL call must resolve to the declaration in <rsma_mcu/Arduino.h>");
     }
@@ -498,6 +498,11 @@ void lower_call(CXCursor cursor, BodyContext& context)
         return;
     }
     const auto argumentCount = clang_Cursor_getNumArguments(cursor);
+    if (name == "yield") {
+        if (argumentCount != 0) fail_at(cursor, "yield expects no arguments");
+        program.instructions.push_back({Opcode::Yield, {}});
+        return;
+    }
     auto argument = [&](int index) {
         if (index >= argumentCount) {
             fail_at(cursor, name + " has too few arguments");

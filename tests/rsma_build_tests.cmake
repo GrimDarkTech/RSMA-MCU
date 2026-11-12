@@ -31,6 +31,30 @@ foreach(required_text "Entry: main (instruction 0)" "Instructions: 5" "HAL_CALL"
     endif()
 endforeach()
 
+set(yield_output "${OUTPUT_DIR}/yield.rsfw")
+execute_process(
+    COMMAND "${RSMA_BUILD}" "${SOURCE_DIR}/yield.cpp" -o "${yield_output}"
+    RESULT_VARIABLE yield_result
+    OUTPUT_VARIABLE yield_stdout
+    ERROR_VARIABLE yield_stderr
+)
+if(NOT yield_result EQUAL 0)
+    message(FATAL_ERROR "rsma-build rejected yield():\n${yield_stdout}\n${yield_stderr}")
+endif()
+execute_process(
+    COMMAND "${RSMA_INSPECT}" "${yield_output}"
+    RESULT_VARIABLE yield_inspect_result
+    OUTPUT_VARIABLE yield_inspect_stdout
+    ERROR_VARIABLE yield_inspect_stderr
+)
+if(NOT yield_inspect_result EQUAL 0)
+    message(FATAL_ERROR "yield firmware is invalid:\n${yield_inspect_stderr}")
+endif()
+string(FIND "${yield_inspect_stdout}" "YIELD (0 operand bytes)" yield_opcode_index)
+if(yield_opcode_index EQUAL -1)
+    message(FATAL_ERROR "yield firmware does not contain YIELD:\n${yield_inspect_stdout}")
+endif()
+
 set(control_output "${OUTPUT_DIR}/constant-control-flow.rsfw")
 execute_process(
     COMMAND "${RSMA_BUILD}" "${SOURCE_DIR}/constant_control_flow.cpp" -o "${control_output}"

@@ -29,6 +29,10 @@
 - Добавить `WAIT`, `YIELD`, HAL calls и лимиты ресурсов.
 - Интегрировать runtime с компонентом Unity без зависимости от coroutine-порядка.
 
+Статус: `WAIT`, `YIELD`, HAL calls и базовые лимиты ресурсов реализованы в C# VM;
+`yield()` доступен через Arduino-like facade. Нужна проверка Unity EditMode/PlayMode
+в Editor для подтверждения host tick integration.
+
 Критерий: Blink и Button исполняются воспроизводимо в EditMode/PlayMode тестах.
 
 ## Этап 3. GPIO и базовый board profile

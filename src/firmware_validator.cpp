@@ -34,6 +34,7 @@ bool is_known_opcode(Opcode opcode)
     case Opcode::CmpGeI32:
     case Opcode::GlobalLoad:
     case Opcode::GlobalStore:
+    case Opcode::Yield:
         return true;
     }
     return false;
@@ -88,7 +89,8 @@ ValidationResult validate_firmware(const FirmwarePackage& package)
             instruction.opcode == Opcode::CmpEqI32 || instruction.opcode == Opcode::CmpNeI32 ||
             instruction.opcode == Opcode::CmpLtI32 || instruction.opcode == Opcode::CmpLeI32 ||
             instruction.opcode == Opcode::CmpGtI32 || instruction.opcode == Opcode::CmpGeI32 ||
-            instruction.opcode == Opcode::Return || instruction.opcode == Opcode::ReadTime) {
+            instruction.opcode == Opcode::Return || instruction.opcode == Opcode::ReadTime ||
+            instruction.opcode == Opcode::Yield) {
             if (!instruction.operands.empty()) {
                 return ValidationResult::failure("operandless instruction has operands");
             }
