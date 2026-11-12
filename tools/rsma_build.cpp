@@ -38,6 +38,7 @@ struct AstContext
     CXCursor mainFunction = clang_getNullCursor();
     unsigned mainDefinitions = 0;
     std::vector<CXCursor> functionDefinitions;
+    std::vector<CXCursor> globalVariables;
     std::exception_ptr failure;
 };
 
@@ -54,6 +55,9 @@ CXChildVisitResult find_main(CXCursor cursor, CXCursor, CXClientData clientData)
                 ++context.mainDefinitions;
             }
         }
+        if (clang_getCursorKind(cursor) == CXCursor_VarDecl &&
+            clang_getCursorKind(clang_getCursorLexicalParent(cursor)) == CXCursor_TranslationUnit)
+            context.globalVariables.push_back(cursor);
     } catch (...) {
         context.failure = std::current_exception();
         return CXChildVisit_Break;
@@ -148,6 +152,7 @@ struct CompileContext
     std::vector<PendingCall> calls;
     std::vector<std::pair<CXCursor, std::uint32_t>> functionEntries;
     std::vector<FunctionLayout> layouts;
+    std::vector<std::pair<CXCursor, std::uint16_t>> globals;
 };
 
 ResolvedFunction resolve_called_function(CXCursor call);
@@ -216,6 +221,14 @@ std::uint16_t local_slot(CXCursor declaration, BodyContext& context)
     fail_at(declaration, "variable is not a supported local in this function");
 }
 
+std::uint16_t global_slot(CXCursor declaration, BodyContext& context)
+{
+    for (const auto& global : context.compiler->globals) {
+        if (clang_equalCursors(global.first, declaration)) return global.second;
+    }
+    fail_at(declaration, "global variable is not supported");
+}
+
 void emit_const(BytecodeProgram& program, std::int32_t value)
 {
     Bytes operands;
@@ -228,6 +241,11 @@ void emit_slot(BytecodeProgram& program, Opcode opcode, std::uint16_t slot)
     program.instructions.push_back({opcode, {
         static_cast<Byte>(slot), static_cast<Byte>(slot >> 8),
     }});
+}
+
+void emit_global_slot(BytecodeProgram& program, Opcode opcode, std::uint16_t slot)
+{
+    emit_slot(program, opcode, slot);
 }
 
 std::vector<CXCursor> cursor_children(CXCursor cursor)
@@ -253,7 +271,12 @@ void emit_expression(CXCursor cursor, BodyContext& context)
     if (kind == CXCursor_DeclRefExpr) {
         const auto declaration = clang_getCursorReferenced(cursor);
         if (clang_Cursor_isNull(declaration)) fail_at(cursor, "unresolved variable reference");
-        emit_slot(*context.program, Opcode::Load, local_slot(declaration, context));
+        const auto global = std::find_if(context.compiler->globals.begin(), context.compiler->globals.end(),
+            [&](const auto& item) { return clang_equalCursors(item.first, declaration); });
+        if (global != context.compiler->globals.end())
+            emit_global_slot(*context.program, Opcode::GlobalLoad, global->second);
+        else
+            emit_slot(*context.program, Opcode::Load, local_slot(declaration, context));
         return;
     }
     if (kind == CXCursor_ParenExpr || kind == CXCursor_UnexposedExpr) {
@@ -578,7 +601,12 @@ CXChildVisitResult lower_statement(CXCursor cursor, CXCursor, CXClientData clien
             }
             const auto declaration = clang_getCursorReferenced(children[0]);
             emit_expression(children[1], context);
-            emit_slot(*context.program, Opcode::Store, local_slot(declaration, context));
+            const auto global = std::find_if(context.compiler->globals.begin(), context.compiler->globals.end(),
+                [&](const auto& item) { return clang_equalCursors(item.first, declaration); });
+            if (global != context.compiler->globals.end())
+                emit_global_slot(*context.program, Opcode::GlobalStore, global->second);
+            else
+                emit_slot(*context.program, Opcode::Store, local_slot(declaration, context));
             return CXChildVisit_Continue;
         }
         case CXCursor_ReturnStmt: {
@@ -740,6 +768,17 @@ FirmwarePackage compile_source(const std::filesystem::path& sourcePath)
 
         CompileContext compiler;
         compiler.functions = std::move(ast.functionDefinitions);
+        if (ast.globalVariables.size() > 256)
+            fail_at(ast.globalVariables[256], "VM supports at most 256 global variables");
+        for (std::size_t globalSlotIndex = 0; globalSlotIndex < ast.globalVariables.size(); ++globalSlotIndex) {
+            const auto global = ast.globalVariables[globalSlotIndex];
+            if (clang_Cursor_getStorageClass(global) == CX_SC_Extern)
+                fail_at(global, "extern global variables are not supported");
+            const auto typeName = ClangString(clang_getTypeSpelling(clang_getCursorType(global))).str();
+            if (typeName != "int" && typeName != "bool")
+                fail_at(global, "global variables currently support only int and bool");
+            compiler.globals.emplace_back(global, static_cast<std::uint16_t>(globalSlotIndex));
+        }
         std::sort(compiler.functions.begin(), compiler.functions.end(), [&](CXCursor left, CXCursor right) {
             return clang_equalCursors(left, ast.mainFunction) && !clang_equalCursors(right, ast.mainFunction);
         });
@@ -803,8 +842,22 @@ FirmwarePackage compile_source(const std::filesystem::path& sourcePath)
             BodyContext bodyContext{
                 &package.bytecode, &peripherals, &compiler, function, entry, isMain,
                 resultType == "int", !isMain};
-            bodyContext.locals = layout->locals;
-            bodyContext.nextSlot = static_cast<std::uint16_t>(layout->locals.size());
+            if (!isMain) {
+                bodyContext.locals = layout->locals;
+                bodyContext.nextSlot = static_cast<std::uint16_t>(layout->locals.size());
+            }
+            if (isMain) {
+                for (std::size_t globalIndex = 0; globalIndex < ast.globalVariables.size(); ++globalIndex) {
+                    const auto global = ast.globalVariables[globalIndex];
+                    const auto initializers = cursor_children(global);
+                    const auto initialValue = initializers.empty() ? 0 : constant_integer(initializers.front());
+                    if (initialValue < std::numeric_limits<std::int32_t>::min() ||
+                        initialValue > std::numeric_limits<std::int32_t>::max())
+                        fail_at(global, "global initializer is outside the VM int32 range");
+                    emit_const(package.bytecode, static_cast<std::int32_t>(initialValue));
+                    emit_global_slot(package.bytecode, Opcode::GlobalStore, static_cast<std::uint16_t>(globalIndex));
+                }
+            }
             for (auto parameter = layout->parameters.rbegin(); parameter != layout->parameters.rend(); ++parameter)
                 emit_slot(package.bytecode, Opcode::Store, local_slot(*parameter, bodyContext));
             clang_visitChildren(body, lower_statement, &bodyContext);

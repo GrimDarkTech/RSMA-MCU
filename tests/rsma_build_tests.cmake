@@ -185,6 +185,53 @@ if(NOT recursive_inspect_result EQUAL 0)
     message(FATAL_ERROR "recursive function package is invalid:\n${recursive_inspect_stderr}")
 endif()
 
+set(global_output "${OUTPUT_DIR}/global-memory.rsfw")
+execute_process(
+    COMMAND "${RSMA_BUILD}" "${SOURCE_DIR}/global_memory.cpp" -o "${global_output}"
+    RESULT_VARIABLE global_result
+    OUTPUT_VARIABLE global_stdout
+    ERROR_VARIABLE global_stderr
+)
+if(NOT global_result EQUAL 0)
+    message(FATAL_ERROR "rsma-build rejected global memory fixture:\n${global_stdout}\n${global_stderr}")
+endif()
+execute_process(
+    COMMAND "${RSMA_INSPECT}" "${global_output}"
+    RESULT_VARIABLE global_inspect_result
+    OUTPUT_VARIABLE global_inspect_stdout
+    ERROR_VARIABLE global_inspect_stderr
+)
+if(NOT global_inspect_result EQUAL 0)
+    message(FATAL_ERROR "global memory package is invalid:\n${global_inspect_stderr}")
+endif()
+foreach(required_text "GLOBAL_LOAD" "GLOBAL_STORE")
+    string(FIND "${global_inspect_stdout}" "${required_text}" global_text_index)
+    if(global_text_index EQUAL -1)
+        message(FATAL_ERROR "global memory package is missing '${required_text}':\n${global_inspect_stdout}")
+    endif()
+endforeach()
+
+foreach(fixture_and_message IN ITEMS
+        "unsupported_global_type.cpp|global variables currently support only int and bool"
+        "unsupported_global_initializer.cpp|expected a compile-time integer constant")
+    string(REPLACE "|" ";" fixture_fields "${fixture_and_message}")
+    list(GET fixture_fields 0 fixture_name)
+    list(GET fixture_fields 1 expected_message)
+    set(rejected_output "${OUTPUT_DIR}/${fixture_name}.rsfw")
+    execute_process(
+        COMMAND "${RSMA_BUILD}" "${SOURCE_DIR}/${fixture_name}" -o "${rejected_output}"
+        RESULT_VARIABLE rejected_result
+        OUTPUT_VARIABLE rejected_stdout
+        ERROR_VARIABLE rejected_stderr
+    )
+    if(rejected_result EQUAL 0 OR EXISTS "${rejected_output}")
+        message(FATAL_ERROR "rsma-build accepted unsupported global fixture ${fixture_name}")
+    endif()
+    if(NOT "${rejected_stderr}" MATCHES "${expected_message}")
+        message(FATAL_ERROR "${fixture_name} received the wrong diagnostic:\n${rejected_stderr}")
+    endif()
+endforeach()
+
 set(invalid_output "${OUTPUT_DIR}/unsupported.rsfw")
 execute_process(
     COMMAND "${RSMA_BUILD}" "${SOURCE_DIR}/unsupported_loop.cpp" -o "${invalid_output}"

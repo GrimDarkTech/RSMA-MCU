@@ -32,6 +32,8 @@ bool is_known_opcode(Opcode opcode)
     case Opcode::CmpLeI32:
     case Opcode::CmpGtI32:
     case Opcode::CmpGeI32:
+    case Opcode::GlobalLoad:
+    case Opcode::GlobalStore:
         return true;
     }
     return false;
@@ -110,6 +112,16 @@ ValidationResult validate_firmware(const FirmwarePackage& package)
             if (slot >= 256) {
                 return ValidationResult::failure("LOAD/STORE slot index exceeds VM memory");
             }
+        }
+        if ((instruction.opcode == Opcode::GlobalLoad || instruction.opcode == Opcode::GlobalStore) &&
+            instruction.operands.size() != 2) {
+            return ValidationResult::failure("GLOBAL_LOAD/GLOBAL_STORE must have two operand bytes");
+        }
+        if (instruction.opcode == Opcode::GlobalLoad || instruction.opcode == Opcode::GlobalStore) {
+            const auto global = static_cast<std::uint16_t>(instruction.operands[0]) |
+                (static_cast<std::uint16_t>(instruction.operands[1]) << 8);
+            if (global >= 256)
+                return ValidationResult::failure("GLOBAL_LOAD/GLOBAL_STORE index exceeds VM memory");
         }
         if ((instruction.opcode == Opcode::Jump || instruction.opcode == Opcode::JumpIf ||
              instruction.opcode == Opcode::Call || instruction.opcode == Opcode::Wait) &&

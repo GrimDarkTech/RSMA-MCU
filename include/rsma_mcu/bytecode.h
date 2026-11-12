@@ -32,6 +32,8 @@ enum class Opcode : std::uint8_t
     CmpLeI32 = 0x15,
     CmpGtI32 = 0x16,
     CmpGeI32 = 0x17,
+    GlobalLoad = 0x18,
+    GlobalStore = 0x19,
 };
 
 constexpr std::uint16_t kBytecodeVersion = 1;
@@ -80,6 +82,8 @@ constexpr std::string_view opcode_name(Opcode opcode)
     case Opcode::CmpLeI32: return "CMP_LE_I32";
     case Opcode::CmpGtI32: return "CMP_GT_I32";
     case Opcode::CmpGeI32: return "CMP_GE_I32";
+    case Opcode::GlobalLoad: return "GLOBAL_LOAD";
+    case Opcode::GlobalStore: return "GLOBAL_STORE";
     }
     return "UNKNOWN";
 }
