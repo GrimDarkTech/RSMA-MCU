@@ -45,7 +45,9 @@
 Статус: typed GPIO, проверка конфликтов virtual/physical mapping, reset state и
 адаптер RSMAGPIO реализованы. Профиль `RSMA-STM32F103` покрывает подтверждённые
 firmware pin mappings PC10, PC11 и PC13 (PWM motor/LED); расширение на другие
-пины требует подтверждённой схемы платы.
+пины требует подтверждённой схемы платы. Добавлен EditMode regression-тест,
+сравнивающий одинаковый Blink через C++ Arduino facade и прямые HAL-вызовы;
+требуется выполнение этого теста в Unity Test Runner.
 
 Критерий: одинаковый сценарий проходит для Arduino-like API и low-level HAL API.
 
