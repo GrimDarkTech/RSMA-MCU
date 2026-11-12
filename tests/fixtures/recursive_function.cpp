@@ -1,9 +1,12 @@
-int recurse()
+int recurse(int count)
 {
-    return recurse();
+    if (count <= 1) {
+        return 1;
+    }
+    return recurse(count - 1);
 }
 
 int main()
 {
-    return recurse();
+    return recurse(4);
 }

@@ -5,7 +5,6 @@
 #include <cstdint>
 #include <filesystem>
 #include <exception>
-#include <functional>
 #include <iostream>
 #include <limits>
 #include <string>
@@ -136,11 +135,19 @@ struct PendingCall
     CXCursor caller;
 };
 
+struct FunctionLayout
+{
+    CXCursor function;
+    std::vector<CXCursor> parameters;
+    std::vector<std::pair<CXCursor, std::uint16_t>> locals;
+};
+
 struct CompileContext
 {
     std::vector<CXCursor> functions;
     std::vector<PendingCall> calls;
     std::vector<std::pair<CXCursor, std::uint32_t>> functionEntries;
+    std::vector<FunctionLayout> layouts;
 };
 
 ResolvedFunction resolve_called_function(CXCursor call);
@@ -177,6 +184,7 @@ struct BodyContext
     std::uint32_t functionEntry;
     bool isMain;
     bool returnsInt;
+    bool hasCallFrame;
     std::vector<std::pair<CXCursor, std::uint16_t>> locals;
     std::uint16_t nextSlot = 0;
     bool terminated = false;
@@ -193,12 +201,19 @@ std::uint32_t current_instruction(const BodyContext& context)
     return static_cast<std::uint32_t>(context.program->instructions.size());
 }
 
+CXChildVisitResult collect_variable_declarations(CXCursor cursor, CXCursor, CXClientData clientData)
+{
+    if (clang_getCursorKind(cursor) == CXCursor_VarDecl)
+        static_cast<std::vector<CXCursor>*>(clientData)->push_back(cursor);
+    return CXChildVisit_Recurse;
+}
+
 std::uint16_t local_slot(CXCursor declaration, BodyContext& context)
 {
     for (const auto& local : context.locals) {
         if (clang_equalCursors(local.first, declaration)) return local.second;
     }
-    fail_at(declaration, "variable is not a supported local in main()");
+    fail_at(declaration, "variable is not a supported local in this function");
 }
 
 void emit_const(BytecodeProgram& program, std::int32_t value)
@@ -265,11 +280,17 @@ void emit_expression(CXCursor cursor, BodyContext& context)
         if (clang_Cursor_isNull(target)) {
             fail_at(cursor, "call target '" + function.name + "' has no definition in this source");
         }
-        if (clang_Cursor_getNumArguments(cursor) != 0) {
-            fail_at(cursor, "user-defined functions currently accept no arguments");
-        }
+        const auto targetLayout = std::find_if(context.compiler->layouts.begin(), context.compiler->layouts.end(),
+            [&](const FunctionLayout& layout) { return clang_equalCursors(layout.function, target); });
+        if (targetLayout == context.compiler->layouts.end())
+            throw FirmwareError("internal compiler error: missing function layout");
+        if (clang_Cursor_getNumArguments(cursor) != static_cast<int>(targetLayout->parameters.size()))
+            fail_at(cursor, "function call has the wrong number of arguments");
         if (ClangString(clang_getTypeSpelling(clang_getCursorResultType(target))).str() != "int") {
             fail_at(cursor, "void functions cannot be used as value expressions");
+        }
+        for (int index = 0; index < clang_Cursor_getNumArguments(cursor); ++index) {
+            emit_expression(clang_Cursor_getArgument(cursor, static_cast<unsigned>(index)), context);
         }
         const auto instruction = context.program->instructions.size();
         context.program->instructions.push_back({Opcode::Call, Bytes(4, 0)});
@@ -417,11 +438,17 @@ void lower_call(CXCursor cursor, BodyContext& context)
             fail_at(cursor, "call target '" + (name.empty() ? std::string("<unknown>") : name) +
                 "' has no definition in this source");
         }
-        if (clang_Cursor_getNumArguments(cursor) != 0) {
-            fail_at(cursor, "user-defined functions currently accept no arguments");
-        }
+        const auto targetLayout = std::find_if(context.compiler->layouts.begin(), context.compiler->layouts.end(),
+            [&](const FunctionLayout& layout) { return clang_equalCursors(layout.function, target); });
+        if (targetLayout == context.compiler->layouts.end())
+            throw FirmwareError("internal compiler error: missing function layout");
+        if (clang_Cursor_getNumArguments(cursor) != static_cast<int>(targetLayout->parameters.size()))
+            fail_at(cursor, "function call has the wrong number of arguments");
         if (ClangString(clang_getTypeSpelling(clang_getCursorResultType(target))).str() != "void") {
             fail_at(cursor, "int-returning functions must be used as value expressions");
+        }
+        for (int index = 0; index < clang_Cursor_getNumArguments(cursor); ++index) {
+            emit_expression(clang_Cursor_getArgument(cursor, static_cast<unsigned>(index)), context);
         }
         const auto instruction = program.instructions.size();
         program.instructions.push_back({Opcode::Call, Bytes(4, 0)});
@@ -488,7 +515,7 @@ void lower_selected_statement(CXCursor cursor, BodyContext& context)
     if (kind == CXCursor_CompoundStmt || kind == CXCursor_DeclStmt) {
         const auto localCount = context.locals.size();
         clang_visitChildren(cursor, lower_statement, &context);
-        if (kind == CXCursor_CompoundStmt) context.locals.resize(localCount);
+        if (kind == CXCursor_CompoundStmt && !context.hasCallFrame) context.locals.resize(localCount);
     } else {
         lower_statement(cursor, clang_getNullCursor(), &context);
     }
@@ -526,9 +553,14 @@ CXChildVisitResult lower_statement(CXCursor cursor, CXCursor, CXClientData clien
             if (typeName != "int" && typeName != "bool") {
                 fail_at(cursor, "local variables currently support only int and bool");
             }
-            if (context.nextSlot >= 256) fail_at(cursor, "VM supports at most 256 local variables");
-            const auto slot = context.nextSlot++;
-            context.locals.emplace_back(cursor, slot);
+            std::uint16_t slot;
+            if (context.hasCallFrame) {
+                slot = local_slot(cursor, context);
+            } else {
+                if (context.nextSlot >= 256) fail_at(cursor, "VM supports at most 256 local variables");
+                slot = context.nextSlot++;
+                context.locals.emplace_back(cursor, slot);
+            }
             const auto children = cursor_children(cursor);
             if (children.empty()) emit_const(*context.program, 0);
             else if (children.size() == 1) emit_expression(children.front(), context);
@@ -640,7 +672,7 @@ CXChildVisitResult lower_statement(CXCursor cursor, CXCursor, CXClientData clien
                 emit_jump(*context.program, Opcode::Jump, loopStart);
             }
             patch_jump(*context.program, exitJump, current_instruction(context));
-            context.locals.resize(localCount);
+            if (!context.hasCallFrame) context.locals.resize(localCount);
             context.terminated = false;
             return CXChildVisit_Continue;
         }
@@ -719,20 +751,34 @@ FirmwarePackage compile_source(const std::filesystem::path& sourcePath)
                 fail_at(function, "multiple main() definitions are not supported");
             if (name != "main" && result != "int" && result != "void")
                 fail_at(function, "user-defined functions must return int or void");
-            const bool reservedHalName = name == "pinMode" || name == "digitalWrite" ||
-                name == "digitalRead" || name == "delay";
-            if (!reservedHalName && clang_Cursor_getNumArguments(function) != 0)
-                fail_at(function, "user-defined functions currently accept no arguments");
+            FunctionLayout layout;
+            layout.function = function;
+            for (int argumentIndex = 0; argumentIndex < clang_Cursor_getNumArguments(function); ++argumentIndex) {
+                const auto parameter = clang_Cursor_getArgument(function, static_cast<unsigned>(argumentIndex));
+                const auto parameterType = ClangString(clang_getTypeSpelling(clang_getCursorType(parameter))).str();
+                if (parameterType != "int" && parameterType != "bool")
+                    fail_at(parameter, "function parameters currently support only int and bool");
+                if (layout.locals.size() >= 256)
+                    fail_at(parameter, "VM supports at most 256 function slots");
+                layout.parameters.push_back(parameter);
+                layout.locals.emplace_back(parameter, static_cast<std::uint16_t>(layout.locals.size()));
+            }
 
             const auto body = function_body(function);
             if (clang_Cursor_isNull(body)) fail_at(function, "function definition has no body");
-            CallChildren bodyChildren;
-            clang_visitChildren(body, collect_call_children, &bodyChildren);
-            for (const auto child : bodyChildren.cursors) {
-                if (clang_getCursorKind(child) == CXCursor_DeclStmt ||
-                    clang_getCursorKind(child) == CXCursor_VarDecl)
-                    fail_at(child, "local variables in user-defined functions require stack frames and are not supported yet");
+            std::vector<CXCursor> declarations;
+            clang_visitChildren(body, collect_variable_declarations, &declarations);
+            for (const auto child : declarations) {
+                if (clang_Cursor_getStorageClass(child) != CX_SC_None)
+                    fail_at(child, "static and extern local variables are not supported");
+                const auto localType = ClangString(clang_getTypeSpelling(clang_getCursorType(child))).str();
+                if (localType != "int" && localType != "bool")
+                    fail_at(child, "local variables currently support only int and bool");
+                if (layout.locals.size() >= 256)
+                    fail_at(child, "VM supports at most 256 function slots");
+                layout.locals.emplace_back(child, static_cast<std::uint16_t>(layout.locals.size()));
             }
+            compiler.layouts.push_back(std::move(layout));
         }
 
         FirmwarePackage package;
@@ -750,9 +796,17 @@ FirmwarePackage compile_source(const std::filesystem::path& sourcePath)
                 &package.bytecode, &peripherals, &compiler, function,
                 static_cast<std::uint32_t>(package.bytecode.instructions.size()), isMain, resultType == "int"});
             compiler.functionEntries.emplace_back(function, entry);
+            const auto layout = std::find_if(compiler.layouts.begin(), compiler.layouts.end(),
+                [&](const FunctionLayout& candidate) { return clang_equalCursors(candidate.function, function); });
+            if (layout == compiler.layouts.end()) throw FirmwareError("internal compiler error: missing function layout");
             const auto body = function_body(function);
             BodyContext bodyContext{
-                &package.bytecode, &peripherals, &compiler, function, entry, isMain, resultType == "int"};
+                &package.bytecode, &peripherals, &compiler, function, entry, isMain,
+                resultType == "int", !isMain};
+            bodyContext.locals = layout->locals;
+            bodyContext.nextSlot = static_cast<std::uint16_t>(layout->locals.size());
+            for (auto parameter = layout->parameters.rbegin(); parameter != layout->parameters.rend(); ++parameter)
+                emit_slot(package.bytecode, Opcode::Store, local_slot(*parameter, bodyContext));
             clang_visitChildren(body, lower_statement, &bodyContext);
             if (bodyContext.failure) std::rethrow_exception(bodyContext.failure);
             if (!bodyContext.terminated) {
@@ -771,29 +825,14 @@ FirmwarePackage compile_source(const std::filesystem::path& sourcePath)
             }
         }
 
-        std::vector<std::vector<std::size_t>> callGraph(compiler.functionEntries.size());
         for (const auto& pending : compiler.calls) {
-            std::size_t callerIndex = compiler.functionEntries.size();
-            std::size_t targetIndex = compiler.functionEntries.size();
-            for (std::size_t i = 0; i < compiler.functionEntries.size(); ++i) {
-                if (clang_equalCursors(compiler.functionEntries[i].first, pending.caller)) callerIndex = i;
-                if (clang_equalCursors(compiler.functionEntries[i].first, pending.target)) targetIndex = i;
-            }
-            if (callerIndex == compiler.functionEntries.size() || targetIndex == compiler.functionEntries.size())
+            const bool callerFound = std::any_of(compiler.functionEntries.begin(), compiler.functionEntries.end(),
+                [&](const auto& entry) { return clang_equalCursors(entry.first, pending.caller); });
+            const bool targetFound = std::any_of(compiler.functionEntries.begin(), compiler.functionEntries.end(),
+                [&](const auto& entry) { return clang_equalCursors(entry.first, pending.target); });
+            if (!callerFound || !targetFound)
                 throw FirmwareError("internal compiler error: unresolved function call");
-            callGraph[callerIndex].push_back(targetIndex);
         }
-        std::vector<unsigned char> visitState(callGraph.size(), 0);
-        std::function<void(std::size_t)> visitFunction = [&](std::size_t functionIndex) {
-            if (visitState[functionIndex] == 1)
-                fail_at(compiler.functionEntries[functionIndex].first,
-                    "recursive function calls are not supported until VM stack frames are implemented");
-            if (visitState[functionIndex] == 2) return;
-            visitState[functionIndex] = 1;
-            for (const auto target : callGraph[functionIndex]) visitFunction(target);
-            visitState[functionIndex] = 2;
-        };
-        for (std::size_t i = 0; i < callGraph.size(); ++i) visitFunction(i);
 
         for (const auto& peripheral : peripherals) {
             if (std::find(package.manifest.requiredPeripherals.begin(),

@@ -152,7 +152,7 @@ execute_process(
 if(NOT functions_inspect_result EQUAL 0)
     message(FATAL_ERROR "functions produced invalid bytecode:\n${functions_inspect_stderr}")
 endif()
-foreach(call_line "[1] CALL (4 operand bytes)" "[5] CALL (4 operand bytes)")
+foreach(call_line "[2] CALL (4 operand bytes)" "[6] CALL (4 operand bytes)")
     string(FIND "${functions_inspect_stdout}" "${call_line}" call_index)
     if(call_index EQUAL -1)
         message(FATAL_ERROR "expected function call '${call_line}':\n${functions_inspect_stdout}")
@@ -172,11 +172,17 @@ execute_process(
     OUTPUT_VARIABLE recursive_stdout
     ERROR_VARIABLE recursive_stderr
 )
-if(recursive_result EQUAL 0 OR EXISTS "${recursive_output}")
-    message(FATAL_ERROR "rsma-build must reject recursive functions without writing firmware")
+if(NOT recursive_result EQUAL 0)
+    message(FATAL_ERROR "rsma-build rejected supported recursive function:\n${recursive_stdout}\n${recursive_stderr}")
 endif()
-if(NOT "${recursive_stderr}" MATCHES "recursive function calls are not supported")
-    message(FATAL_ERROR "recursive call rejection has an unclear diagnostic:\n${recursive_stderr}")
+execute_process(
+    COMMAND "${RSMA_INSPECT}" "${recursive_output}"
+    RESULT_VARIABLE recursive_inspect_result
+    OUTPUT_VARIABLE recursive_inspect_stdout
+    ERROR_VARIABLE recursive_inspect_stderr
+)
+if(NOT recursive_inspect_result EQUAL 0)
+    message(FATAL_ERROR "recursive function package is invalid:\n${recursive_inspect_stderr}")
 endif()
 
 set(invalid_output "${OUTPUT_DIR}/unsupported.rsfw")
@@ -214,6 +220,7 @@ if(NOT "${dynamic_stderr}" MATCHES "compile-time integer constant")
 endif()
 
 foreach(fixture_and_message IN ITEMS
+        "unsupported_function_parameter.cpp|function parameters currently support only int and bool"
         "fake_hal.cpp|declaration in <rsma_mcu/Arduino.h>"
         "nested_call_expression.cpp|unsupported statement")
     string(REPLACE "|" ";" fixture_fields "${fixture_and_message}")
