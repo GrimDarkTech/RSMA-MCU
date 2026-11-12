@@ -29,10 +29,11 @@ Clang для разбора C++, но пока принимает в `main()` т
 `pinMode(pin, INPUT|OUTPUT)`, `digitalWrite(pin, LOW|HIGH)`, `digitalRead(pin)`,
 `delay(constant)` и `return [constant]`. Поддерживаются локальные `int`/`bool`
 переменные, простые присваивания, сложение/вычитание, сравнения `==`, `!=`, `<`,
-`<=`, `>`, `>=`, логическое `!`, а также runtime `if/else` и `while`. Runtime
+`<=`, `>`, `>=`, логическое `!`, а также runtime `if/else`, `while` и простой
+`for (int i = start; i < end; ++i)`/`--i`. Runtime
 условия понижаются в stack bytecode, comparisons — в opcodes `CMP_*_I32`.
-Аргументы pin/mode/delay HAL должны оставаться compile-time константами. `for`,
-`do-while`, helper-функции, статическая память, PWM и UART пока отклоняются с
+Аргументы pin/mode/delay HAL должны оставаться compile-time константами. `do-while`,
+helper-функции, статическая память, PWM и UART пока отклоняются с
 диагностикой; неполная прошивка не создаётся.
 
 Для сборки target `rsma-build` включается опцией

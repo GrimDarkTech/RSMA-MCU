@@ -2,7 +2,7 @@
 
 int main()
 {
-    for (;;) {
+    do {
         digitalWrite(13, HIGH);
-    }
+    } while (1);
 }

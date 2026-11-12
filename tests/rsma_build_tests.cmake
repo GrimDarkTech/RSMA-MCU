@@ -107,6 +107,32 @@ foreach(fixture IN ITEMS "runtime_gpio_condition.cpp" "runtime_while.cpp")
     endforeach()
 endforeach()
 
+set(for_output "${OUTPUT_DIR}/for-loop.rsfw")
+execute_process(
+    COMMAND "${RSMA_BUILD}" "${SOURCE_DIR}/for_loop.cpp" -o "${for_output}"
+    RESULT_VARIABLE for_result
+    OUTPUT_VARIABLE for_stdout
+    ERROR_VARIABLE for_stderr
+)
+if(NOT for_result EQUAL 0)
+    message(FATAL_ERROR "rsma-build rejected for loop:\n${for_stdout}\n${for_stderr}")
+endif()
+execute_process(
+    COMMAND "${RSMA_INSPECT}" "${for_output}"
+    RESULT_VARIABLE for_inspect_result
+    OUTPUT_VARIABLE for_inspect_stdout
+    ERROR_VARIABLE for_inspect_stderr
+)
+if(NOT for_inspect_result EQUAL 0)
+    message(FATAL_ERROR "for loop produced invalid bytecode:\n${for_inspect_stderr}")
+endif()
+foreach(required_text "ADD_I32" "CMP_LT_I32" "JUMP_IF" "JUMP" "HALT")
+    string(FIND "${for_inspect_stdout}" "${required_text}" text_index)
+    if(text_index EQUAL -1)
+        message(FATAL_ERROR "for loop is missing '${required_text}':\n${for_inspect_stdout}")
+    endif()
+endforeach()
+
 set(invalid_output "${OUTPUT_DIR}/unsupported.rsfw")
 execute_process(
     COMMAND "${RSMA_BUILD}" "${SOURCE_DIR}/unsupported_loop.cpp" -o "${invalid_output}"

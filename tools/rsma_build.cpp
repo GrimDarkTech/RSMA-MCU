@@ -282,6 +282,26 @@ void patch_jump(BytecodeProgram& program, std::size_t instruction, std::uint32_t
     patch_jump_target(program.instructions.at(instruction), target);
 }
 
+void lower_increment(CXCursor cursor, BodyContext& context)
+{
+    const auto children = cursor_children(cursor);
+    if (children.size() != 1 || clang_getCursorKind(children[0]) != CXCursor_DeclRefExpr)
+        fail_at(cursor, "for increment must target a local variable");
+
+    const auto declaration = clang_getCursorReferenced(children[0]);
+    const auto operation = ClangString(clang_getUnaryOperatorKindSpelling(
+        clang_getCursorUnaryOperatorKind(cursor))).str();
+    if (operation != "++" && operation != "--")
+        fail_at(cursor, "for increment supports only ++ and --");
+
+    const auto slot = local_slot(declaration, context);
+    emit_slot(*context.program, Opcode::Load, slot);
+    emit_const(*context.program, 1);
+    context.program->instructions.push_back({
+        operation == "++" ? Opcode::AddI32 : Opcode::SubI32, {}});
+    emit_slot(*context.program, Opcode::Store, slot);
+}
+
 ResolvedFunction resolve_called_function(CXCursor call)
 {
     const auto referenced = clang_getCursorReferenced(call);
@@ -388,10 +408,11 @@ void lower_call(CXCursor cursor, BodyContext& context)
 
 void lower_selected_statement(CXCursor cursor, BodyContext& context)
 {
-    if (clang_getCursorKind(cursor) == CXCursor_CompoundStmt) {
+    const auto kind = clang_getCursorKind(cursor);
+    if (kind == CXCursor_CompoundStmt || kind == CXCursor_DeclStmt) {
         const auto localCount = context.locals.size();
         clang_visitChildren(cursor, lower_statement, &context);
-        context.locals.resize(localCount);
+        if (kind == CXCursor_CompoundStmt) context.locals.resize(localCount);
     } else {
         lower_statement(cursor, clang_getNullCursor(), &context);
     }
@@ -515,6 +536,30 @@ CXChildVisitResult lower_statement(CXCursor cursor, CXCursor, CXClientData clien
             const bool bodyTerminated = context.terminated;
             if (!bodyTerminated) emit_jump(*context.program, Opcode::Jump, loopStart);
             patch_jump(*context.program, exitJump, current_instruction(context));
+            context.terminated = false;
+            return CXChildVisit_Continue;
+        }
+        case CXCursor_ForStmt: {
+            const auto children = cursor_children(cursor);
+            if (children.size() != 4 || clang_getCursorKind(children[2]) != CXCursor_UnaryOperator)
+                fail_at(cursor, "for requires init, condition, ++/-- increment, and body");
+
+            const auto localCount = context.locals.size();
+            lower_selected_statement(children[0], context);
+            const auto loopStart = current_instruction(context);
+            emit_expression(children[1], context);
+            emit_const(*context.program, 0);
+            context.program->instructions.push_back({Opcode::CmpEqI32, {}});
+            const auto exitJump = emit_jump_placeholder(*context.program, Opcode::JumpIf);
+            lower_selected_statement(children[3], context);
+            const bool bodyTerminated = context.terminated;
+            context.terminated = false;
+            if (!bodyTerminated) {
+                lower_increment(children[2], context);
+                emit_jump(*context.program, Opcode::Jump, loopStart);
+            }
+            patch_jump(*context.program, exitJump, current_instruction(context));
+            context.locals.resize(localCount);
             context.terminated = false;
             return CXChildVisit_Continue;
         }
