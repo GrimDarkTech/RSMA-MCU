@@ -92,14 +92,11 @@ CRC corruption, fragmented parsing, duplicate sequence и timeout/reconnect;
 - Дополнительные Arduino и STM32 board profiles.
 - Профилирование и threaded dispatch только после измерений.
 
-Статус: добавлен первый ADC vertical slice — service `AnalogRead`, 12-bit
-sample contract, Virtual backend, Unity adapter mapping и builder lowering
-`analogRead(channel)`. Добавлены C++/C# validator/runtime tests и builder
-fixture; SPI/I2C, ограниченный DMA, persistent storage и новые board profiles
-остаются следующими подпунктами этапа. Добавлены low-level HAL services
-`SpiTransfer` и `I2cTransfer` с однобайтным stack-based обменом, deterministic
-Virtual backend и 7-bit I2C validation; Arduino facade/builder lowering для
-этих шин требует отдельного language/API среза.
+Статус: добавлены ADC, SPI, I2C и ограниченный DMA vertical slices. `analogRead`,
+`spiTransfer`, `i2cTransfer` и `dmaTransfer` понижаются builder-ом в stack-based
+HAL calls; Virtual backend поддерживает deterministic responses, I2C validation
+ограничивает address до 7 bit, DMA channel ограничен `0..3`. Асинхронные DMA
+buffers/queues и persistent storage остаются следующими подпунктами этапа.
 
 ## Что не входит в первый релиз
 

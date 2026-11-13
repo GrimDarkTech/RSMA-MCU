@@ -81,6 +81,32 @@ foreach(required_text "HAL_CALL" "HALT" "Peripherals: ADC")
     endif()
 endforeach()
 
+set(bus_output "${OUTPUT_DIR}/bus-transfers.rsfw")
+execute_process(
+    COMMAND "${RSMA_BUILD}" "${SOURCE_DIR}/bus_transfers.cpp" -o "${bus_output}"
+    RESULT_VARIABLE bus_result
+    OUTPUT_VARIABLE bus_stdout
+    ERROR_VARIABLE bus_stderr
+)
+if(NOT bus_result EQUAL 0)
+    message(FATAL_ERROR "rsma-build rejected SPI/I2C/DMA transfers:\n${bus_stdout}\n${bus_stderr}")
+endif()
+execute_process(
+    COMMAND "${RSMA_INSPECT}" "${bus_output}"
+    RESULT_VARIABLE bus_inspect_result
+    OUTPUT_VARIABLE bus_inspect_stdout
+    ERROR_VARIABLE bus_inspect_stderr
+)
+if(NOT bus_inspect_result EQUAL 0)
+    message(FATAL_ERROR "SPI/I2C/DMA firmware is invalid:\n${bus_inspect_stderr}")
+endif()
+foreach(required_text "HAL_CALL" "HALT" "Peripherals: SPI I2C DMA")
+    string(FIND "${bus_inspect_stdout}" "${required_text}" bus_text_index)
+    if(bus_text_index EQUAL -1)
+        message(FATAL_ERROR "SPI/I2C/DMA firmware is missing '${required_text}':\n${bus_inspect_stdout}")
+    endif()
+endforeach()
+
 set(control_output "${OUTPUT_DIR}/constant-control-flow.rsfw")
 execute_process(
     COMMAND "${RSMA_BUILD}" "${SOURCE_DIR}/constant_control_flow.cpp" -o "${control_output}"

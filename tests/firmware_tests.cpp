@@ -191,6 +191,18 @@ void test_rejects_invalid_package()
         {static_cast<Byte>(HalService::SpiTransfer), 0, 1, 1}};
     require(!validate_firmware(package).valid, "SPI reserved value should be rejected");
 
+    package.bytecode.instructions[0] = {Opcode::HalCall,
+        {static_cast<Byte>(HalService::DmaTransfer), 0, 2, 0}};
+    require(validate_firmware(package).valid, "DMA transfer HAL call should be accepted");
+
+    package.bytecode.instructions[0] = {Opcode::HalCall,
+        {static_cast<Byte>(HalService::DmaTransfer), 0, 4, 0}};
+    require(!validate_firmware(package).valid, "DMA channel above range should be rejected");
+
+    package.bytecode.instructions[0] = {Opcode::HalCall,
+        {static_cast<Byte>(HalService::DmaTransfer), 0, 2, 1}};
+    require(!validate_firmware(package).valid, "DMA reserved value should be rejected");
+
     package.bytecode.instructions[0] = {Opcode::HalCall, {6, 0, 7, 0x80}};
     require(!validate_firmware(package).valid, "ConfigurePin reserved bits should be rejected");
 

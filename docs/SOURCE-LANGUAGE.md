@@ -36,9 +36,13 @@ Clang для разбора C++, но пока принимает в `main()` т
 текущий `Advance()` до следующего host tick, не добавляя времени ожидания.
 `analogRead(channel)` принимает compile-time channel `0..255` и понижает в
 `HAL_CALL` service `AnalogRead`; runtime возвращает 12-bit sample `0..4095`.
-Низкоуровневые `HAL_CALL` services `SpiTransfer` и `I2cTransfer` принимают
-TX byte со stack и возвращают RX byte на stack; I2C address ограничен `0..127`.
-Arduino-like wrappers для SPI/I2C пока не входят в frontend contract.
+`spiTransfer(bus, value)` и `i2cTransfer(address, value)` принимают route/address
+как compile-time integer и TX byte как runtime expression; они понижаются в
+stack-based `HAL_CALL`, возвращая RX byte как `int`. SPI bus ограничен `0..255`,
+I2C address ограничен `0..127`.
+Ограниченный synchronous DMA API `dmaTransfer(channel, value)` использует тот же
+stack contract, принимает channel `0..3` и возвращает RX byte. Это не async DMA
+buffer API: descriptor-и, callbacks и transfer queues пока не входят в frontend.
 Поддерживаются глобальные пользовательские `int`/`void` функции с параметрами и
 локальными переменными типов `int`/`bool`. Аргументы и `int`-результат передаются
 через VM value stack; вызовы компилируются в `CALL`, возвраты — в `RETURN`. VM
