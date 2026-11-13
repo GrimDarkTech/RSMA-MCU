@@ -72,6 +72,13 @@ firmware pin mappings PC10, PC11 и PC13 (PWM motor/LED); расширение �
 - Сделать bridge для физического STM32/Arduino adapter firmware.
 - Добавить conformance tests с диапазонами задержки и частоты.
 
+Статус: добавлен pure C# HITL transport contract с framing `RSMH`, version,
+message type, flags, sequence, timestamp, payload length и CRC32. Реализованы
+stream parser для fragmented frames и session monitor с heartbeat timeout,
+reconnect и однократным safe-state callback. EditMode tests покрывают round-trip,
+CRC corruption, fragmented parsing, duplicate sequence и timeout/reconnect;
+нужно подключить реальный serial backend после фиксации wire contract.
+
 Критерий: один набор функциональных сценариев выполняется с EmulatorBackend и HitlBackend.
 
 ## Этап 6. Расширение SDK
