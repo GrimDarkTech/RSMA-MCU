@@ -58,6 +58,11 @@ firmware pin mappings PC10, PC11 и PC13 (PWM motor/LED); расширение �
 - Реализовать timer/PWM с определенной точностью.
 - Реализовать buffered UART и callbacks.
 
+Статус: SysTick-like simulated time, edge-triggered GPIO IRQ, PWM, buffered UART
+и transmission callbacks реализованы. Добавлен PlayMode trace-тест полного
+сценария `Blink -> Button -> Interrupt -> PWM -> UART`; его runtime execution
+нужно подтвердить в Unity Test Runner.
+
 Критерий: `Blink -> Button -> Interrupt -> PWM -> UART` работает в VM с трассировкой событий.
 
 ## Этап 5. HITL
