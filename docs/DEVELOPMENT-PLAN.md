@@ -96,7 +96,10 @@ CRC corruption, fragmented parsing, duplicate sequence и timeout/reconnect;
 sample contract, Virtual backend, Unity adapter mapping и builder lowering
 `analogRead(channel)`. Добавлены C++/C# validator/runtime tests и builder
 fixture; SPI/I2C, ограниченный DMA, persistent storage и новые board profiles
-остаются следующими подпунктами этапа.
+остаются следующими подпунктами этапа. Добавлены low-level HAL services
+`SpiTransfer` и `I2cTransfer` с однобайтным stack-based обменом, deterministic
+Virtual backend и 7-bit I2C validation; Arduino facade/builder lowering для
+этих шин требует отдельного language/API среза.
 
 ## Что не входит в первый релиз
 
