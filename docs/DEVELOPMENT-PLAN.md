@@ -92,13 +92,13 @@ CRC corruption, fragmented parsing, duplicate sequence и timeout/reconnect;
 - Дополнительные Arduino и STM32 board profiles.
 - Профилирование и threaded dispatch только после измерений.
 
-Статус: добавлены ADC, SPI, I2C, ограниченный DMA и EEPROM-подобный persistent
-storage vertical slices. `analogRead`,
-`spiTransfer`, `i2cTransfer` и `dmaTransfer` понижаются builder-ом в stack-based
-HAL calls; Virtual backend поддерживает deterministic responses, I2C validation
-ограничивает address до 7 bit, DMA channel ограничен `0..3`. Асинхронные DMA
-buffers/queues остаются следующими подпунктами этапа. EEPROM storage имеет 256
-байт, сохраняется между VM reset и очищается явным backend clear. Добавлены
+Статус: добавлены ADC, SPI, I2C, synchronous и bounded asynchronous DMA,
+EEPROM-подобное persistent storage. Async DMA имеет четыре 256-byte staging
+buffers, очередь на 16 outstanding transfers, per-channel FIFO и детерминированное
+completion по simulated time; C++ facade предоставляет submit/status/read/release,
+а существующий `dmaTransfer` не изменён. `analogRead`, `spiTransfer`, `i2cTransfer`
+и DMA calls понижаются builder-ом в stack-based HAL calls; EEPROM storage имеет
+256 байт, сохраняется между VM reset и очищается явным backend clear. Добавлены
 profile-aware validation и Unity mappings для `RSMA-STM32F103` и
 `RSMA-AVR-ATmega328P`; AVR profile намеренно не поддерживает DMA.
 

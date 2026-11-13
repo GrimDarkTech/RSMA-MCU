@@ -154,7 +154,7 @@ ValidationResult validate_firmware(const FirmwarePackage& package)
                 (static_cast<std::uint16_t>(instruction.operands[1]) << 8);
             const auto value = instruction.operands[3];
             if (service < static_cast<std::uint16_t>(HalService::PinMode) ||
-                service > static_cast<std::uint16_t>(HalService::EepromWrite)) {
+                service > static_cast<std::uint16_t>(HalService::DmaRelease)) {
                 return ValidationResult::failure("HAL_CALL contains an unknown service ID");
             }
             if (service == static_cast<std::uint16_t>(HalService::PinMode) && value > 1) {
@@ -196,6 +196,38 @@ ValidationResult validate_firmware(const FirmwarePackage& package)
             }
             if (service == static_cast<std::uint16_t>(HalService::DmaTransfer) && instruction.operands[2] > 3) {
                 return ValidationResult::failure("HAL DMA channel is outside the supported range");
+            }
+            if ((service == static_cast<std::uint16_t>(HalService::DmaBufferWrite) ||
+                service == static_cast<std::uint16_t>(HalService::DmaBufferRead)) && instruction.operands[2] >= 4) {
+                return ValidationResult::failure("HAL DMA buffer index is outside the supported range");
+            }
+            if (service == static_cast<std::uint16_t>(HalService::DmaSubmit) &&
+                (instruction.operands[2] > 3 || instruction.operands[3] >= 4)) {
+                return ValidationResult::failure("HAL DMA submit channel or buffer is outside the supported range");
+            }
+            if ((service == static_cast<std::uint16_t>(HalService::DmaStatus) ||
+                service == static_cast<std::uint16_t>(HalService::DmaRelease)) &&
+                (instruction.operands[2] != 0 || instruction.operands[3] != 0)) {
+                return ValidationResult::failure("HAL DMA ticket operation reserved bytes must be zero");
+            }
+            if (service == static_cast<std::uint16_t>(HalService::DmaReadByte) && value != 0) {
+                return ValidationResult::failure("HAL DMA read-byte reserved value must be zero");
+            }
+            if ((service == static_cast<std::uint16_t>(HalService::DmaBufferWrite) ||
+                service == static_cast<std::uint16_t>(HalService::DmaBufferRead)) && instruction.operands[2] >= 4) {
+                return ValidationResult::failure("HAL DMA buffer index is outside the supported range");
+            }
+            if (service == static_cast<std::uint16_t>(HalService::DmaSubmit) &&
+                (instruction.operands[2] > 3 || instruction.operands[3] >= 4)) {
+                return ValidationResult::failure("HAL DMA submit channel or buffer is outside the supported range");
+            }
+            if ((service == static_cast<std::uint16_t>(HalService::DmaStatus) ||
+                service == static_cast<std::uint16_t>(HalService::DmaRelease)) &&
+                (instruction.operands[2] != 0 || instruction.operands[3] != 0)) {
+                return ValidationResult::failure("HAL DMA ticket operation reserved bytes must be zero");
+            }
+            if (service == static_cast<std::uint16_t>(HalService::DmaReadByte) && instruction.operands[3] != 0) {
+                return ValidationResult::failure("HAL DMA read reserved value must be zero");
             }
         }
         if (instruction.opcode == Opcode::Jump || instruction.opcode == Opcode::JumpIf ||

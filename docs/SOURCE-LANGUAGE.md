@@ -40,9 +40,24 @@ Clang для разбора C++, но пока принимает в `main()` т
 как compile-time integer и TX byte как runtime expression; они понижаются в
 stack-based `HAL_CALL`, возвращая RX byte как `int`. SPI bus ограничен `0..255`,
 I2C address ограничен `0..127`.
-Ограниченный synchronous DMA API `dmaTransfer(channel, value)` использует тот же
-stack contract, принимает channel `0..3` и возвращает RX byte. Это не async DMA
-buffer API: descriptor-и, callbacks и transfer queues пока не входят в frontend.
+Synchronous DMA API `dmaTransfer(channel, value)` сохраняется для обмена одним
+byte. Bounded asynchronous DMA использует четыре staging buffers по 256 byte и
+очередь до 16 незакрытых transfers: `dmaBufferWrite(buffer, offset, value)` и
+`dmaBufferRead(buffer, offset)` обращаются к TX staging buffer;
+`dmaSubmit(channel, buffer, length)` копирует TX snapshot и возвращает ticket,
+`DMA_QUEUE_FULL` при заполненной очереди. Допустимы channels/buffers `0..3`,
+offset `0..255`, length `1..256`.
+`dmaStatus(ticket)` возвращает `DMA_QUEUED`, `DMA_ACTIVE`, `DMA_COMPLETE` либо
+`dmaReadByte(ticket, offset)` читает RX только после completion,
+`dmaRelease(ticket)` освобождает завершённый transfer; invalid status/release
+используют `DMA_INVALID`. Максимум один transfer на
+channel активен одновременно; разные channels выполняются параллельно, transfers
+одного channel запускаются FIFO. VM HALT и `VirtualMachine.Reset()` не изменяют
+hardware queue; явный `VirtualGpioBank.ResetDma()` отменяет transfers и очищает
+staging buffers. Completion детерминированно следует simulated time и
+`VirtualGpioBank.DmaByteTimeMilliseconds`; default — 0.01 ms на byte. Firmware
+должна yield/wait между submit и polling: status polling само не продвигает
+виртуальное время. Буфер snapshot можно сразу переиспользовать после submit.
 EEPROM-подобное storage предоставляет `eepromRead(address)` и
 `eepromWrite(address, value)`: address `0..255` должен быть compile-time
 константой, write value может быть runtime expression и ограничен byte range.

@@ -308,10 +308,62 @@ void emit_expression(CXCursor cursor, BodyContext& context)
         const auto function = resolve_called_function(cursor);
         if (function.name == "digitalRead" || function.name == "analogRead" ||
             function.name == "spiTransfer" || function.name == "i2cTransfer" ||
-            function.name == "dmaTransfer" || function.name == "eepromRead") {
+            function.name == "dmaTransfer" || function.name == "eepromRead" ||
+            function.name == "dmaBufferRead" || function.name == "dmaSubmit" ||
+            function.name == "dmaStatus" || function.name == "dmaReadByte" ||
+            function.name == "dmaRelease") {
             if (!is_builtin_hal_declaration(function.declaration))
                 fail_at(cursor, "HAL call must resolve to the declaration in <rsma_mcu/Arduino.h>");
             const auto argumentCount = clang_Cursor_getNumArguments(cursor);
+            if (function.name == "dmaStatus" || function.name == "dmaRelease") {
+                if (argumentCount != 1)
+                    fail_at(cursor, function.name + " expects a ticket argument");
+                emit_expression(clang_Cursor_getArgument(cursor, 0), context);
+                append_hal_call(*context.program,
+                    function.name == "dmaStatus" ? HalService::DmaStatus : HalService::DmaRelease, 0, 0);
+                context.peripherals->emplace_back("DMA");
+                return;
+            }
+            if (function.name == "dmaBufferRead") {
+                if (argumentCount != 2)
+                    fail_at(cursor, "dmaBufferRead expects buffer and offset arguments");
+                const auto buffer = constant_integer(clang_Cursor_getArgument(cursor, 0));
+                const auto offset = constant_integer(clang_Cursor_getArgument(cursor, 1));
+                if (buffer < 0 || buffer >= 4)
+                    fail_at(clang_Cursor_getArgument(cursor, 0), "DMA buffer index must be between 0 and 3");
+                if (offset < 0 || offset > 255)
+                    fail_at(clang_Cursor_getArgument(cursor, 1), "DMA buffer offset must be between 0 and 255");
+                append_hal_call(*context.program, HalService::DmaBufferRead,
+                    static_cast<Byte>(buffer), static_cast<Byte>(offset));
+                context.peripherals->emplace_back("DMA");
+                return;
+            }
+            if (function.name == "dmaReadByte") {
+                if (argumentCount != 2)
+                    fail_at(cursor, "dmaReadByte expects ticket and offset arguments");
+                const auto offset = constant_integer(clang_Cursor_getArgument(cursor, 1));
+                if (offset < 0 || offset > 255)
+                    fail_at(clang_Cursor_getArgument(cursor, 1), "DMA result offset must be between 0 and 255");
+                emit_expression(clang_Cursor_getArgument(cursor, 0), context);
+                append_hal_call(*context.program, HalService::DmaReadByte, static_cast<Byte>(offset), 0);
+                context.peripherals->emplace_back("DMA");
+                return;
+            }
+            if (function.name == "dmaSubmit") {
+                if (argumentCount != 3)
+                    fail_at(cursor, "dmaSubmit expects channel, buffer and length arguments");
+                const auto channel = constant_integer(clang_Cursor_getArgument(cursor, 0));
+                const auto buffer = constant_integer(clang_Cursor_getArgument(cursor, 1));
+                if (channel < 0 || channel > 3)
+                    fail_at(clang_Cursor_getArgument(cursor, 0), "DMA channel must be between 0 and 3");
+                if (buffer < 0 || buffer > 3)
+                    fail_at(clang_Cursor_getArgument(cursor, 1), "DMA buffer index must be between 0 and 3");
+                emit_expression(clang_Cursor_getArgument(cursor, 2), context);
+                append_hal_call(*context.program, HalService::DmaSubmit,
+                    static_cast<Byte>(channel), static_cast<Byte>(buffer));
+                context.peripherals->emplace_back("DMA");
+                return;
+            }
             if ((function.name == "digitalRead" || function.name == "analogRead" ||
                 function.name == "eepromRead") && argumentCount != 1)
                 fail_at(cursor, function.name + " expects one argument");
@@ -503,7 +555,9 @@ void lower_call(CXCursor cursor, BodyContext& context)
     const bool halName = name == "pinMode" || name == "digitalWrite" ||
         name == "digitalRead" || name == "analogRead" || name == "spiTransfer" ||
         name == "i2cTransfer" || name == "dmaTransfer" || name == "eepromRead" ||
-        name == "eepromWrite" || name == "delay" || name == "yield";
+        name == "eepromWrite" || name == "dmaBufferWrite" || name == "dmaBufferRead" ||
+        name == "dmaSubmit" || name == "dmaStatus" || name == "dmaReadByte" ||
+        name == "dmaRelease" || name == "delay" || name == "yield";
     if (halName && !is_builtin_hal_declaration(function.declaration)) {
         fail_at(cursor, "HAL call must resolve to the declaration in <rsma_mcu/Arduino.h>");
     }
@@ -574,6 +628,51 @@ void lower_call(CXCursor cursor, BodyContext& context)
         peripherals.emplace_back("EEPROM");
         return;
     }
+    if (name == "dmaBufferWrite") {
+        if (argumentCount != 3) fail_at(cursor, "dmaBufferWrite expects buffer, offset and value arguments");
+        const auto buffer = byteArgument(0, "DMA buffer index");
+        const auto offset = byteArgument(1, "DMA buffer offset");
+        if (buffer >= 4) fail_at(argument(0), "DMA buffer index must be between 0 and 3");
+        emit_expression(argument(2), context);
+        append_hal_call(program, HalService::DmaBufferWrite, buffer, offset);
+        peripherals.emplace_back("DMA");
+        return;
+    }
+    if (name == "dmaBufferRead") {
+        if (argumentCount != 2) fail_at(cursor, "dmaBufferRead expects buffer and offset arguments");
+        const auto buffer = byteArgument(0, "DMA buffer index");
+        const auto offset = byteArgument(1, "DMA buffer offset");
+        if (buffer >= 4) fail_at(argument(0), "DMA buffer index must be between 0 and 3");
+        append_hal_call(program, HalService::DmaBufferRead, buffer, offset);
+        peripherals.emplace_back("DMA");
+        return;
+    }
+    if (name == "dmaSubmit") {
+        if (argumentCount != 3) fail_at(cursor, "dmaSubmit expects channel, buffer and length arguments");
+        const auto channel = byteArgument(0, "DMA channel");
+        const auto buffer = byteArgument(1, "DMA buffer index");
+        if (channel > 3) fail_at(argument(0), "DMA channel must be between 0 and 3");
+        if (buffer > 3) fail_at(argument(1), "DMA buffer index must be between 0 and 3");
+        emit_expression(argument(2), context);
+        append_hal_call(program, HalService::DmaSubmit, channel, buffer);
+        peripherals.emplace_back("DMA");
+        return;
+    }
+    if (name == "dmaStatus" || name == "dmaRelease") {
+        if (argumentCount != 1) fail_at(cursor, name + " expects a ticket argument");
+        emit_expression(argument(0), context);
+        append_hal_call(program, name == "dmaStatus" ? HalService::DmaStatus : HalService::DmaRelease, 0, 0);
+        peripherals.emplace_back("DMA");
+        return;
+    }
+    if (name == "dmaReadByte") {
+        if (argumentCount != 2) fail_at(cursor, "dmaReadByte expects ticket and offset arguments");
+        const auto offset = byteArgument(1, "DMA result offset");
+        emit_expression(argument(0), context);
+        append_hal_call(program, HalService::DmaReadByte, offset, 0);
+        peripherals.emplace_back("DMA");
+        return;
+    }
     if (name == "digitalWrite") {
         if (argumentCount != 2) fail_at(cursor, "digitalWrite expects two arguments");
         const auto pin = byteArgument(0, "pin");
@@ -593,6 +692,16 @@ void lower_call(CXCursor cursor, BodyContext& context)
         if (argumentCount != 1) fail_at(cursor, "analogRead expects one argument");
         append_hal_call(program, HalService::AnalogRead, byteArgument(0, "ADC channel"), 0);
         peripherals.emplace_back("ADC");
+        return;
+    }
+    if (name == "dmaBufferWrite") {
+        if (argumentCount != 3) fail_at(cursor, "dmaBufferWrite expects buffer, offset and value arguments");
+        const auto buffer = byteArgument(0, "DMA buffer index");
+        const auto offset = byteArgument(1, "DMA buffer offset");
+        if (buffer >= 4) fail_at(argument(0), "DMA buffer index must be between 0 and 3");
+        emit_expression(argument(2), context);
+        append_hal_call(program, HalService::DmaBufferWrite, buffer, offset);
+        peripherals.emplace_back("DMA");
         return;
     }
     if (name == "spiTransfer" || name == "i2cTransfer" || name == "dmaTransfer") {

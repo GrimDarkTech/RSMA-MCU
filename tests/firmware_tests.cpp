@@ -220,6 +220,34 @@ void test_rejects_invalid_package()
         {static_cast<Byte>(HalService::EepromWrite), 0, 7, 1}};
     require(!validate_firmware(package).valid, "EEPROM write reserved value should be rejected");
 
+    package.bytecode.instructions[0] = {Opcode::HalCall,
+        {static_cast<Byte>(HalService::DmaBufferWrite), 0, 3, 255}};
+    require(validate_firmware(package).valid, "DMA buffer write HAL call should be accepted");
+
+    package.bytecode.instructions[0] = {Opcode::HalCall,
+        {static_cast<Byte>(HalService::DmaBufferRead), 0, 4, 0}};
+    require(!validate_firmware(package).valid, "DMA buffer index above range should be rejected");
+
+    package.bytecode.instructions[0] = {Opcode::HalCall,
+        {static_cast<Byte>(HalService::DmaSubmit), 0, 3, 3}};
+    require(validate_firmware(package).valid, "DMA submit HAL call should be accepted");
+
+    package.bytecode.instructions[0] = {Opcode::HalCall,
+        {static_cast<Byte>(HalService::DmaSubmit), 0, 4, 0}};
+    require(!validate_firmware(package).valid, "DMA submit channel above range should be rejected");
+
+    package.bytecode.instructions[0] = {Opcode::HalCall,
+        {static_cast<Byte>(HalService::DmaStatus), 0, 1, 0}};
+    require(!validate_firmware(package).valid, "DMA status reserved bytes should be rejected");
+
+    package.bytecode.instructions[0] = {Opcode::HalCall,
+        {static_cast<Byte>(HalService::DmaReadByte), 0, 255, 0}};
+    require(validate_firmware(package).valid, "DMA read-byte HAL call should be accepted");
+
+    package.bytecode.instructions[0] = {Opcode::HalCall,
+        {static_cast<Byte>(HalService::DmaRelease), 0, 0, 1}};
+    require(!validate_firmware(package).valid, "DMA release reserved bytes should be rejected");
+
     package.bytecode.instructions[0] = {Opcode::HalCall, {6, 0, 7, 0x80}};
     require(!validate_firmware(package).valid, "ConfigurePin reserved bits should be rejected");
 

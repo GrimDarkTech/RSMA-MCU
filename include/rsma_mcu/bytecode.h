@@ -60,6 +60,12 @@ enum class HalService : std::uint16_t
     DmaTransfer = 15,
     EepromRead = 16,
     EepromWrite = 17,
+    DmaBufferWrite = 18,
+    DmaBufferRead = 19,
+    DmaSubmit = 20,
+    DmaStatus = 21,
+    DmaReadByte = 22,
+    DmaRelease = 23,
 };
 
 constexpr std::string_view opcode_name(Opcode opcode)

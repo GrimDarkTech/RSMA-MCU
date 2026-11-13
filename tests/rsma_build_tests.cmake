@@ -133,6 +133,32 @@ foreach(required_text "HAL_CALL" "HALT" "Peripherals: SPI I2C DMA")
     endif()
 endforeach()
 
+set(async_dma_output "${OUTPUT_DIR}/async-dma.rsfw")
+execute_process(
+    COMMAND "${RSMA_BUILD}" "${SOURCE_DIR}/async_dma.cpp" -o "${async_dma_output}"
+    RESULT_VARIABLE async_dma_result
+    OUTPUT_VARIABLE async_dma_stdout
+    ERROR_VARIABLE async_dma_stderr
+)
+if(NOT async_dma_result EQUAL 0)
+    message(FATAL_ERROR "rsma-build rejected asynchronous DMA fixture:\n${async_dma_stdout}\n${async_dma_stderr}")
+endif()
+execute_process(
+    COMMAND "${RSMA_INSPECT}" "${async_dma_output}"
+    RESULT_VARIABLE async_dma_inspect_result
+    OUTPUT_VARIABLE async_dma_inspect_stdout
+    ERROR_VARIABLE async_dma_inspect_stderr
+)
+if(NOT async_dma_inspect_result EQUAL 0)
+    message(FATAL_ERROR "asynchronous DMA firmware is invalid:\n${async_dma_inspect_stderr}")
+endif()
+foreach(required_text "HAL_CALL" "HALT" "Peripherals: DMA")
+    string(FIND "${async_dma_inspect_stdout}" "${required_text}" async_dma_text_index)
+    if(async_dma_text_index EQUAL -1)
+        message(FATAL_ERROR "asynchronous DMA firmware is missing '${required_text}':\n${async_dma_inspect_stdout}")
+    endif()
+endforeach()
+
 set(control_output "${OUTPUT_DIR}/constant-control-flow.rsfw")
 execute_process(
     COMMAND "${RSMA_BUILD}" "${SOURCE_DIR}/constant_control_flow.cpp" -o "${control_output}"
