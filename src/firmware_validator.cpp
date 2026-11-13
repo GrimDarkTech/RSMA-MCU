@@ -154,7 +154,7 @@ ValidationResult validate_firmware(const FirmwarePackage& package)
                 (static_cast<std::uint16_t>(instruction.operands[1]) << 8);
             const auto value = instruction.operands[3];
             if (service < static_cast<std::uint16_t>(HalService::PinMode) ||
-                service > static_cast<std::uint16_t>(HalService::DmaTransfer)) {
+                service > static_cast<std::uint16_t>(HalService::EepromWrite)) {
                 return ValidationResult::failure("HAL_CALL contains an unknown service ID");
             }
             if (service == static_cast<std::uint16_t>(HalService::PinMode) && value > 1) {
@@ -186,6 +186,10 @@ ValidationResult validate_firmware(const FirmwarePackage& package)
                 service == static_cast<std::uint16_t>(HalService::I2cTransfer) ||
                 service == static_cast<std::uint16_t>(HalService::DmaTransfer)) && value != 0) {
                 return ValidationResult::failure("HAL bus transfer reserved value must be zero");
+            }
+            if ((service == static_cast<std::uint16_t>(HalService::EepromRead) ||
+                service == static_cast<std::uint16_t>(HalService::EepromWrite)) && value != 0) {
+                return ValidationResult::failure("HAL EEPROM reserved value must be zero");
             }
             if (service == static_cast<std::uint16_t>(HalService::I2cTransfer) && instruction.operands[2] > 0x7F) {
                 return ValidationResult::failure("HAL I2C address must be 7-bit");

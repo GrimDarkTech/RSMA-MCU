@@ -92,11 +92,13 @@ CRC corruption, fragmented parsing, duplicate sequence и timeout/reconnect;
 - Дополнительные Arduino и STM32 board profiles.
 - Профилирование и threaded dispatch только после измерений.
 
-Статус: добавлены ADC, SPI, I2C и ограниченный DMA vertical slices. `analogRead`,
+Статус: добавлены ADC, SPI, I2C, ограниченный DMA и EEPROM-подобный persistent
+storage vertical slices. `analogRead`,
 `spiTransfer`, `i2cTransfer` и `dmaTransfer` понижаются builder-ом в stack-based
 HAL calls; Virtual backend поддерживает deterministic responses, I2C validation
 ограничивает address до 7 bit, DMA channel ограничен `0..3`. Асинхронные DMA
-buffers/queues и persistent storage остаются следующими подпунктами этапа.
+buffers/queues остаются следующими подпунктами этапа. EEPROM storage имеет 256
+байт, сохраняется между VM reset и очищается явным backend clear.
 
 ## Что не входит в первый релиз
 

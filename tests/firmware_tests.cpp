@@ -203,6 +203,22 @@ void test_rejects_invalid_package()
         {static_cast<Byte>(HalService::DmaTransfer), 0, 2, 1}};
     require(!validate_firmware(package).valid, "DMA reserved value should be rejected");
 
+    package.bytecode.instructions[0] = {Opcode::HalCall,
+        {static_cast<Byte>(HalService::EepromRead), 0, 7, 0}};
+    require(validate_firmware(package).valid, "EEPROM read HAL call should be accepted");
+
+    package.bytecode.instructions[0] = {Opcode::HalCall,
+        {static_cast<Byte>(HalService::EepromWrite), 0, 7, 0}};
+    require(validate_firmware(package).valid, "EEPROM write HAL call should be accepted");
+
+    package.bytecode.instructions[0] = {Opcode::HalCall,
+        {static_cast<Byte>(HalService::EepromRead), 0, 7, 1}};
+    require(!validate_firmware(package).valid, "EEPROM read reserved value should be rejected");
+
+    package.bytecode.instructions[0] = {Opcode::HalCall,
+        {static_cast<Byte>(HalService::EepromWrite), 0, 7, 1}};
+    require(!validate_firmware(package).valid, "EEPROM write reserved value should be rejected");
+
     package.bytecode.instructions[0] = {Opcode::HalCall, {6, 0, 7, 0x80}};
     require(!validate_firmware(package).valid, "ConfigurePin reserved bits should be rejected");
 

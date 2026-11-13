@@ -58,6 +58,8 @@ enum class HalService : std::uint16_t
     SpiTransfer = 13,
     I2cTransfer = 14,
     DmaTransfer = 15,
+    EepromRead = 16,
+    EepromWrite = 17,
 };
 
 constexpr std::string_view opcode_name(Opcode opcode)

@@ -308,22 +308,27 @@ void emit_expression(CXCursor cursor, BodyContext& context)
         const auto function = resolve_called_function(cursor);
         if (function.name == "digitalRead" || function.name == "analogRead" ||
             function.name == "spiTransfer" || function.name == "i2cTransfer" ||
-            function.name == "dmaTransfer") {
+            function.name == "dmaTransfer" || function.name == "eepromRead") {
             if (!is_builtin_hal_declaration(function.declaration))
                 fail_at(cursor, "HAL call must resolve to the declaration in <rsma_mcu/Arduino.h>");
             const auto argumentCount = clang_Cursor_getNumArguments(cursor);
-            if ((function.name == "digitalRead" || function.name == "analogRead") && argumentCount != 1)
+            if ((function.name == "digitalRead" || function.name == "analogRead" ||
+                function.name == "eepromRead") && argumentCount != 1)
                 fail_at(cursor, function.name + " expects one argument");
-            if (function.name != "digitalRead" && function.name != "analogRead" && argumentCount != 2)
+            if (function.name != "digitalRead" && function.name != "analogRead" &&
+                function.name != "eepromRead" && argumentCount != 2)
                 fail_at(cursor, function.name + " expects route and value arguments");
             const auto route = constant_integer(clang_Cursor_getArgument(cursor, 0));
             if (route < 0 || route > std::numeric_limits<Byte>::max())
                 fail_at(clang_Cursor_getArgument(cursor, 0), "HAL route must be between 0 and 255");
-            if (function.name == "digitalRead" || function.name == "analogRead") {
+            if (function.name == "digitalRead" || function.name == "analogRead" ||
+                function.name == "eepromRead") {
                 append_hal_call(*context.program,
-                    function.name == "analogRead" ? HalService::AnalogRead : HalService::DigitalRead,
+                    function.name == "analogRead" ? HalService::AnalogRead :
+                        function.name == "eepromRead" ? HalService::EepromRead : HalService::DigitalRead,
                     static_cast<Byte>(route), 0);
-                context.peripherals->emplace_back(function.name == "analogRead" ? "ADC" : "GPIO");
+                context.peripherals->emplace_back(function.name == "analogRead" ? "ADC" :
+                    function.name == "eepromRead" ? "EEPROM" : "GPIO");
                 return;
             }
             emit_expression(clang_Cursor_getArgument(cursor, 1), context);
@@ -497,7 +502,8 @@ void lower_call(CXCursor cursor, BodyContext& context)
     const auto& name = function.name;
     const bool halName = name == "pinMode" || name == "digitalWrite" ||
         name == "digitalRead" || name == "analogRead" || name == "spiTransfer" ||
-        name == "i2cTransfer" || name == "dmaTransfer" || name == "delay" || name == "yield";
+        name == "i2cTransfer" || name == "dmaTransfer" || name == "eepromRead" ||
+        name == "eepromWrite" || name == "delay" || name == "yield";
     if (halName && !is_builtin_hal_declaration(function.declaration)) {
         fail_at(cursor, "HAL call must resolve to the declaration in <rsma_mcu/Arduino.h>");
     }
@@ -551,6 +557,21 @@ void lower_call(CXCursor cursor, BodyContext& context)
         if (mode > 1) fail_at(argument(1), "pinMode supports only INPUT and OUTPUT");
         append_hal_call(program, HalService::PinMode, pin, mode);
         peripherals.emplace_back("GPIO");
+        return;
+    }
+    if (name == "eepromRead") {
+        if (argumentCount != 1) fail_at(cursor, "eepromRead expects one argument");
+        const auto address = byteArgument(0, "EEPROM address");
+        append_hal_call(program, HalService::EepromRead, address, 0);
+        peripherals.emplace_back("EEPROM");
+        return;
+    }
+    if (name == "eepromWrite") {
+        if (argumentCount != 2) fail_at(cursor, "eepromWrite expects address and value arguments");
+        const auto address = byteArgument(0, "EEPROM address");
+        emit_expression(argument(1), context);
+        append_hal_call(program, HalService::EepromWrite, address, 0);
+        peripherals.emplace_back("EEPROM");
         return;
     }
     if (name == "digitalWrite") {

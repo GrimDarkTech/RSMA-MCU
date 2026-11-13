@@ -31,6 +31,32 @@ foreach(required_text "Entry: main (instruction 0)" "Instructions: 5" "HAL_CALL"
     endif()
 endforeach()
 
+set(eeprom_output "${OUTPUT_DIR}/eeprom-storage.rsfw")
+execute_process(
+    COMMAND "${RSMA_BUILD}" "${SOURCE_DIR}/eeprom_storage.cpp" -o "${eeprom_output}"
+    RESULT_VARIABLE eeprom_result
+    OUTPUT_VARIABLE eeprom_stdout
+    ERROR_VARIABLE eeprom_stderr
+)
+if(NOT eeprom_result EQUAL 0)
+    message(FATAL_ERROR "rsma-build rejected EEPROM storage fixture:\n${eeprom_stdout}\n${eeprom_stderr}")
+endif()
+execute_process(
+    COMMAND "${RSMA_INSPECT}" "${eeprom_output}"
+    RESULT_VARIABLE eeprom_inspect_result
+    OUTPUT_VARIABLE eeprom_inspect_stdout
+    ERROR_VARIABLE eeprom_inspect_stderr
+)
+if(NOT eeprom_inspect_result EQUAL 0)
+    message(FATAL_ERROR "EEPROM storage firmware is invalid:\n${eeprom_inspect_stderr}")
+endif()
+foreach(required_text "HAL_CALL" "HALT" "Peripherals: EEPROM")
+    string(FIND "${eeprom_inspect_stdout}" "${required_text}" eeprom_text_index)
+    if(eeprom_text_index EQUAL -1)
+        message(FATAL_ERROR "EEPROM storage firmware is missing '${required_text}':\n${eeprom_inspect_stdout}")
+    endif()
+endforeach()
+
 set(yield_output "${OUTPUT_DIR}/yield.rsfw")
 execute_process(
     COMMAND "${RSMA_BUILD}" "${SOURCE_DIR}/yield.cpp" -o "${yield_output}"

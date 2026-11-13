@@ -43,6 +43,12 @@ I2C address ограничен `0..127`.
 Ограниченный synchronous DMA API `dmaTransfer(channel, value)` использует тот же
 stack contract, принимает channel `0..3` и возвращает RX byte. Это не async DMA
 buffer API: descriptor-и, callbacks и transfer queues пока не входят в frontend.
+EEPROM-подобное storage предоставляет `eepromRead(address)` и
+`eepromWrite(address, value)`: address `0..255` должен быть compile-time
+константой, write value может быть runtime expression и ограничен byte range.
+Read возвращает byte на VM stack, write снимает byte со stack. Storage принадлежит
+HAL backend, поэтому сохраняется между `VirtualMachine.Reset()` и очищается только
+явной backend-операцией reset/clear.
 Поддерживаются глобальные пользовательские `int`/`void` функции с параметрами и
 локальными переменными типов `int`/`bool`. Аргументы и `int`-результат передаются
 через VM value stack; вызовы компилируются в `CALL`, возвраты — в `RETURN`. VM
