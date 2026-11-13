@@ -218,6 +218,30 @@ void test_hitl_frame_round_trip_and_crc()
     require(error == "HITL frame CRC mismatch", "corrupt HITL frame returned an unexpected error");
 }
 
+void test_hitl_codec_matches_shared_golden_vector()
+{
+    const Bytes expected{
+        0x52, 0x53, 0x4D, 0x48, 0x01, 0x05, 0x03, 0x00,
+        0x40, 0x30, 0x20, 0x10, 0x7B, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x01, 0x02,
+        0x03, 0xFF, 0xE1, 0xE5, 0x78, 0xCE
+    };
+    HitlFrame frame;
+    frame.type = HitlMessageType::Data;
+    frame.flags = 3;
+    frame.sequence = 0x10203040u;
+    frame.timestampMilliseconds = 123;
+    frame.payload = {1, 2, 3, 0xFF};
+
+    require(encode_hitl_frame(frame) == expected, "C++ HITL codec differs from shared golden vector");
+    HitlFrame decoded;
+    std::string error;
+    require(decode_hitl_frame(expected, decoded, error), "golden HITL vector was rejected: " + error);
+    require(decoded.type == frame.type && decoded.flags == frame.flags &&
+        decoded.sequence == frame.sequence && decoded.timestampMilliseconds == frame.timestampMilliseconds &&
+        decoded.payload == frame.payload, "C++ decoder did not recover shared golden vector fields");
+}
+
 } // namespace
 
 int main(int argc, char** argv)
@@ -228,6 +252,7 @@ int main(int argc, char** argv)
         test_rejects_corruption();
         test_rejects_invalid_package();
         test_hitl_frame_round_trip_and_crc();
+        test_hitl_codec_matches_shared_golden_vector();
         std::cout << "All RSFW tests passed\n";
         return 0;
     } catch (const std::exception& error) {

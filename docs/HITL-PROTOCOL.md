@@ -24,6 +24,19 @@ excluding the four-byte magic and the CRC field itself. A frame's total size is
 `26 + payload_length` bytes. Receivers reject unsupported versions/types,
 truncation, inconsistent lengths, and CRC mismatch before dispatching payload.
 
+## Shared conformance vector
+
+For a `Data` frame with flags `3`, sequence `0x10203040`, timestamp `123`, and
+payload `01 02 03 FF`, both encoders must produce these exact bytes:
+
+```text
+52 53 4D 48 01 05 03 00 40 30 20 10 7B 00 00 00
+00 00 00 00 04 00 01 02 03 FF E1 E5 78 CE
+```
+
+The CRC value is `0xCE78E5E1` and is stored little-endian. C# and C++ tests
+assert both encoding to and decoding from this vector.
+
 ## Session behavior
 
 - Each direction maintains its own sequence. A receiver accepts only a sequence
