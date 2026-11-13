@@ -92,6 +92,12 @@ CRC corruption, fragmented parsing, duplicate sequence и timeout/reconnect;
 - Дополнительные Arduino и STM32 board profiles.
 - Профилирование и threaded dispatch только после измерений.
 
+Статус: добавлен первый ADC vertical slice — service `AnalogRead`, 12-bit
+sample contract, Virtual backend, Unity adapter mapping и builder lowering
+`analogRead(channel)`. Добавлены C++/C# validator/runtime tests и builder
+fixture; SPI/I2C, ограниченный DMA, persistent storage и новые board profiles
+остаются следующими подпунктами этапа.
+
 ## Что не входит в первый релиз
 
 - Полная эмуляция ARM/AVR instruction set.

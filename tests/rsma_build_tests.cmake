@@ -55,6 +55,32 @@ if(yield_opcode_index EQUAL -1)
     message(FATAL_ERROR "yield firmware does not contain YIELD:\n${yield_inspect_stdout}")
 endif()
 
+set(analog_output "${OUTPUT_DIR}/analog-read.rsfw")
+execute_process(
+    COMMAND "${RSMA_BUILD}" "${SOURCE_DIR}/analog_read.cpp" -o "${analog_output}"
+    RESULT_VARIABLE analog_result
+    OUTPUT_VARIABLE analog_stdout
+    ERROR_VARIABLE analog_stderr
+)
+if(NOT analog_result EQUAL 0)
+    message(FATAL_ERROR "rsma-build rejected analogRead():\n${analog_stdout}\n${analog_stderr}")
+endif()
+execute_process(
+    COMMAND "${RSMA_INSPECT}" "${analog_output}"
+    RESULT_VARIABLE analog_inspect_result
+    OUTPUT_VARIABLE analog_inspect_stdout
+    ERROR_VARIABLE analog_inspect_stderr
+)
+if(NOT analog_inspect_result EQUAL 0)
+    message(FATAL_ERROR "analogRead firmware is invalid:\n${analog_inspect_stderr}")
+endif()
+foreach(required_text "HAL_CALL" "HALT" "Peripherals: ADC")
+    string(FIND "${analog_inspect_stdout}" "${required_text}" analog_text_index)
+    if(analog_text_index EQUAL -1)
+        message(FATAL_ERROR "analogRead firmware is missing '${required_text}':\n${analog_inspect_stdout}")
+    endif()
+endforeach()
+
 set(control_output "${OUTPUT_DIR}/constant-control-flow.rsfw")
 execute_process(
     COMMAND "${RSMA_BUILD}" "${SOURCE_DIR}/constant_control_flow.cpp" -o "${control_output}"

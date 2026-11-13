@@ -34,6 +34,8 @@ Clang для разбора C++, но пока принимает в `main()` т
 условия понижаются в stack bytecode, comparisons — в opcodes `CMP_*_I32`.
 Вызов `yield()` без аргументов понижает в opcode `YIELD`: VM приостанавливает
 текущий `Advance()` до следующего host tick, не добавляя времени ожидания.
+`analogRead(channel)` принимает compile-time channel `0..255` и понижает в
+`HAL_CALL` service `AnalogRead`; runtime возвращает 12-bit sample `0..4095`.
 Поддерживаются глобальные пользовательские `int`/`void` функции с параметрами и
 локальными переменными типов `int`/`bool`. Аргументы и `int`-результат передаются
 через VM value stack; вызовы компилируются в `CALL`, возвраты — в `RETURN`. VM

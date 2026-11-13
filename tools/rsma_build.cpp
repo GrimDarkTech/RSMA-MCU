@@ -306,16 +306,19 @@ void emit_expression(CXCursor cursor, BodyContext& context)
     }
     if (kind == CXCursor_CallExpr) {
         const auto function = resolve_called_function(cursor);
-        if (function.name == "digitalRead") {
+        if (function.name == "digitalRead" || function.name == "analogRead") {
             if (!is_builtin_hal_declaration(function.declaration))
                 fail_at(cursor, "HAL call must resolve to the declaration in <rsma_mcu/Arduino.h>");
-            if (clang_Cursor_getNumArguments(cursor) != 1) fail_at(cursor, "digitalRead expects one argument");
+            if (clang_Cursor_getNumArguments(cursor) != 1)
+                fail_at(cursor, function.name + " expects one argument");
             const auto pin = constant_integer(clang_Cursor_getArgument(cursor, 0));
             if (pin < 0 || pin > std::numeric_limits<Byte>::max()) {
-                fail_at(clang_Cursor_getArgument(cursor, 0), "pin must be between 0 and 255");
+                fail_at(clang_Cursor_getArgument(cursor, 0), "channel must be between 0 and 255");
             }
-            append_hal_call(*context.program, HalService::DigitalRead, static_cast<Byte>(pin), 0);
-            context.peripherals->emplace_back("GPIO");
+            append_hal_call(*context.program,
+                function.name == "analogRead" ? HalService::AnalogRead : HalService::DigitalRead,
+                static_cast<Byte>(pin), 0);
+            context.peripherals->emplace_back(function.name == "analogRead" ? "ADC" : "GPIO");
             return;
         }
         const auto target = find_function_definition(function.declaration, *context.compiler);
@@ -470,7 +473,7 @@ void lower_call(CXCursor cursor, BodyContext& context)
     const auto function = resolve_called_function(cursor);
     const auto& name = function.name;
     const bool halName = name == "pinMode" || name == "digitalWrite" ||
-        name == "digitalRead" || name == "delay" || name == "yield";
+        name == "digitalRead" || name == "analogRead" || name == "delay" || name == "yield";
     if (halName && !is_builtin_hal_declaration(function.declaration)) {
         fail_at(cursor, "HAL call must resolve to the declaration in <rsma_mcu/Arduino.h>");
     }
@@ -539,6 +542,12 @@ void lower_call(CXCursor cursor, BodyContext& context)
         if (argumentCount != 1) fail_at(cursor, "digitalRead expects one argument");
         append_hal_call(program, HalService::DigitalRead, byteArgument(0, "pin"), 0);
         peripherals.emplace_back("GPIO");
+        return;
+    }
+    if (name == "analogRead") {
+        if (argumentCount != 1) fail_at(cursor, "analogRead expects one argument");
+        append_hal_call(program, HalService::AnalogRead, byteArgument(0, "ADC channel"), 0);
+        peripherals.emplace_back("ADC");
         return;
     }
     if (name == "delay") {

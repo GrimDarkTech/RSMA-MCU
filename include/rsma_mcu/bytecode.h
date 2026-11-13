@@ -54,6 +54,7 @@ enum class HalService : std::uint16_t
     UartAvailable = 9,
     UartRead = 10,
     UartWrite = 11,
+    AnalogRead = 12,
 };
 
 constexpr std::string_view opcode_name(Opcode opcode)

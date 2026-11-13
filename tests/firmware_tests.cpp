@@ -153,6 +153,10 @@ void test_rejects_invalid_package()
     require(validate_firmware(package).valid, "UART write HAL call should be accepted");
 
     package.bytecode.instructions[0] = {Opcode::HalCall,
+        {static_cast<Byte>(HalService::AnalogRead), 0, 4, 0}};
+    require(validate_firmware(package).valid, "ADC read HAL call should be accepted");
+
+    package.bytecode.instructions[0] = {Opcode::HalCall,
         {static_cast<Byte>(HalService::UartBegin), 0, 4, 0}};
     require(!validate_firmware(package).valid, "UART port outside range should be rejected");
 
@@ -164,8 +168,12 @@ void test_rejects_invalid_package()
         {static_cast<Byte>(HalService::UartRead), 0, 0, 1}};
     require(!validate_firmware(package).valid, "UART read reserved value should be rejected");
 
-    package.bytecode.instructions[0] = {Opcode::HalCall, {12, 0, 7, 128}};
+    package.bytecode.instructions[0] = {Opcode::HalCall, {13, 0, 7, 128}};
     require(!validate_firmware(package).valid, "unknown HAL service should be rejected");
+
+    package.bytecode.instructions[0] = {Opcode::HalCall,
+        {static_cast<Byte>(HalService::AnalogRead), 0, 4, 1}};
+    require(!validate_firmware(package).valid, "ADC reserved value should be rejected");
 
     package.bytecode.instructions[0] = {Opcode::HalCall, {6, 0, 7, 0x80}};
     require(!validate_firmware(package).valid, "ConfigurePin reserved bits should be rejected");
