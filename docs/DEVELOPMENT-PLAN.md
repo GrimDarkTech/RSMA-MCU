@@ -78,6 +78,8 @@ stream parser для fragmented frames и session monitor с heartbeat timeout,
 reconnect и однократным safe-state callback. EditMode tests покрывают round-trip,
 CRC corruption, fragmented parsing, duplicate sequence и timeout/reconnect;
 нужно подключить реальный serial backend после фиксации wire contract.
+Общий wire layout задокументирован в [HITL-PROTOCOL.md](HITL-PROTOCOL.md),
+а portable C++ codec добавлен для adapter firmware и host-side conformance.
 
 Критерий: один набор функциональных сценариев выполняется с EmulatorBackend и HitlBackend.
 

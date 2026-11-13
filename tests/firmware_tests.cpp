@@ -5,6 +5,7 @@
 
 #include "rsma_mcu/firmware_format.h"
 #include "rsma_mcu/firmware_validator.h"
+#include "rsma_mcu/hitl_protocol.h"
 
 namespace {
 
@@ -185,6 +186,38 @@ void test_rejects_invalid_package()
     require(!validate_firmware(package).valid, "RETURN_IRQ operands should be rejected");
 }
 
+void test_hitl_frame_round_trip_and_crc()
+{
+    HitlFrame frame;
+    frame.type = HitlMessageType::Data;
+    frame.flags = 3;
+    frame.sequence = 0x10203040u;
+    frame.timestampMilliseconds = 1700000000123ull;
+    frame.payload = {1, 2, 3, 0xFF};
+
+    const auto bytes = encode_hitl_frame(frame);
+    require(bytes.size() == kHitlHeaderSize + frame.payload.size() + kHitlChecksumSize,
+        "HITL frame has unexpected wire size");
+    require(bytes[0] == 'R' && bytes[1] == 'S' && bytes[2] == 'M' && bytes[3] == 'H',
+        "HITL magic does not match wire contract");
+
+    HitlFrame decoded;
+    std::string error;
+    require(decode_hitl_frame(bytes, decoded, error), "valid HITL frame was rejected: " + error);
+    require(decoded.version == frame.version, "HITL version did not round-trip");
+    require(decoded.type == frame.type, "HITL message type did not round-trip");
+    require(decoded.flags == frame.flags, "HITL flags did not round-trip");
+    require(decoded.sequence == frame.sequence, "HITL sequence did not round-trip");
+    require(decoded.timestampMilliseconds == frame.timestampMilliseconds,
+        "HITL timestamp did not round-trip");
+    require(decoded.payload == frame.payload, "HITL payload did not round-trip");
+
+    auto corrupted = bytes;
+    corrupted.back() ^= 0x01;
+    require(!decode_hitl_frame(corrupted, decoded, error), "corrupt HITL CRC was accepted");
+    require(error == "HITL frame CRC mismatch", "corrupt HITL frame returned an unexpected error");
+}
+
 } // namespace
 
 int main(int argc, char** argv)
@@ -194,6 +227,7 @@ int main(int argc, char** argv)
         test_round_trip(vectorDirectory);
         test_rejects_corruption();
         test_rejects_invalid_package();
+        test_hitl_frame_round_trip_and_crc();
         std::cout << "All RSFW tests passed\n";
         return 0;
     } catch (const std::exception& error) {
