@@ -16,6 +16,7 @@ option(RSMA_MCU_BUILD_BUILDER "Build the Clang-based rsma-build frontend" OFF)
 add_library(rsma_mcu_core STATIC
     src/firmware_format.cpp
     src/firmware_validator.cpp
+    src/board_profiles.cpp
     src/hitl_protocol.cpp
 )
 target_include_directories(rsma_mcu_core

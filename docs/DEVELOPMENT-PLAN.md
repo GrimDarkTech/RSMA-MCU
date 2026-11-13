@@ -98,7 +98,9 @@ storage vertical slices. `analogRead`,
 HAL calls; Virtual backend поддерживает deterministic responses, I2C validation
 ограничивает address до 7 bit, DMA channel ограничен `0..3`. Асинхронные DMA
 buffers/queues остаются следующими подпунктами этапа. EEPROM storage имеет 256
-байт, сохраняется между VM reset и очищается явным backend clear.
+байт, сохраняется между VM reset и очищается явным backend clear. Добавлены
+profile-aware validation и Unity mappings для `RSMA-STM32F103` и
+`RSMA-AVR-ATmega328P`; AVR profile намеренно не поддерживает DMA.
 
 ## Что не входит в первый релиз
 

@@ -5,6 +5,7 @@
 
 #include "rsma_mcu/firmware_format.h"
 #include "rsma_mcu/firmware_validator.h"
+#include "rsma_mcu/board_profiles.h"
 #include "rsma_mcu/hitl_protocol.h"
 
 namespace {
@@ -238,6 +239,37 @@ void test_rejects_invalid_package()
     require(!validate_firmware(package).valid, "RETURN_IRQ operands should be rejected");
 }
 
+void test_board_profiles()
+{
+    const auto* stm32 = find_board_profile("RSMA-STM32F103");
+    require(stm32 != nullptr, "STM32F103 board profile should be registered");
+    require(find_board_profile("RSMA-AVR-ATmega328P") != nullptr,
+        "ATmega328P board profile should be registered");
+    require(find_board_profile("RSMA-UNKNOWN") == nullptr,
+        "unknown board profile should not be registered");
+
+    auto package = make_package();
+    require(validate_firmware_for_board(package, *stm32).valid,
+        "STM32 package should validate against STM32 profile");
+    require(!validate_firmware_for_board(package, "RSMA-AVR-ATmega328P").valid,
+        "STM32 package should not validate against AVR profile");
+
+    package.manifest.boardId = "RSMA-AVR-ATmega328P";
+    package.manifest.flashSize = 32 * 1024;
+    package.manifest.ramSize = 2 * 1024;
+    require(validate_firmware_for_board(package, "RSMA-AVR-ATmega328P").valid,
+        "AVR package should validate against AVR profile");
+
+    package.manifest.requiredPeripherals.push_back("DMA");
+    require(!validate_firmware_for_board(package, "RSMA-AVR-ATmega328P").valid,
+        "AVR profile should reject DMA requirement");
+
+    package.manifest.requiredPeripherals.clear();
+    package.manifest.flashSize = 33 * 1024;
+    require(!validate_firmware_for_board(package, "RSMA-AVR-ATmega328P").valid,
+        "AVR profile should reject oversized flash requirement");
+}
+
 void test_hitl_frame_round_trip_and_crc()
 {
     HitlFrame frame;
@@ -303,6 +335,7 @@ int main(int argc, char** argv)
         test_round_trip(vectorDirectory);
         test_rejects_corruption();
         test_rejects_invalid_package();
+        test_board_profiles();
         test_hitl_frame_round_trip_and_crc();
         test_hitl_codec_matches_shared_golden_vector();
         std::cout << "All RSFW tests passed\n";

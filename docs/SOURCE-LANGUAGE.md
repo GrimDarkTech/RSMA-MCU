@@ -76,3 +76,10 @@ line:u32`. Они описывают entry points глобальных функ�
 Frontend формирует существующий `FirmwarePackage` в формате RSFW v1. Физические
 MCU targets и их startup/runtime соглашения являются отдельными целями сборки и
 не изменяют контракт VM `main()`.
+
+Поддерживаются board profiles `RSMA-STM32F103` и `RSMA-AVR-ATmega328P`.
+Профиль проверяет board ID, flash/RAM capacity и список требуемых периферий.
+STM32F103 предоставляет GPIO, SYSTICK, IRQ, PWM, UART, ADC, SPI, I2C, DMA и
+EEPROM; ATmega328P предоставляет GPIO, SYSTICK, IRQ, PWM, UART, ADC, SPI, I2C и
+EEPROM, но не DMA. Firmware с несовместимым board ID, превышенной capacity или
+неподдерживаемой периферией отклоняется profile-aware validator-ом.
