@@ -185,6 +185,32 @@ foreach(required_text "HAL_CALL" "WAIT" "HALT" "Peripherals: UART SYSTICK")
     endif()
 endforeach()
 
+set(serial_ports_output "${OUTPUT_DIR}/serial-ports.rsfw")
+execute_process(
+    COMMAND "${RSMA_BUILD}" "${SOURCE_DIR}/serial_ports.cpp" -o "${serial_ports_output}"
+    RESULT_VARIABLE serial_ports_result
+    OUTPUT_VARIABLE serial_ports_stdout
+    ERROR_VARIABLE serial_ports_stderr
+)
+if(NOT serial_ports_result EQUAL 0)
+    message(FATAL_ERROR "rsma-build rejected multi-port Serial fixture:\n${serial_ports_stdout}\n${serial_ports_stderr}")
+endif()
+execute_process(
+    COMMAND "${RSMA_INSPECT}" "${serial_ports_output}"
+    RESULT_VARIABLE serial_ports_inspect_result
+    OUTPUT_VARIABLE serial_ports_inspect_stdout
+    ERROR_VARIABLE serial_ports_inspect_stderr
+)
+if(NOT serial_ports_inspect_result EQUAL 0)
+    message(FATAL_ERROR "multi-port Serial firmware is invalid:\n${serial_ports_inspect_stderr}")
+endif()
+foreach(required_text "HAL_CALL" "WAIT" "HALT" "Peripherals: UART SYSTICK")
+    string(FIND "${serial_ports_inspect_stdout}" "${required_text}" serial_ports_text_index)
+    if(serial_ports_text_index EQUAL -1)
+        message(FATAL_ERROR "multi-port Serial firmware is missing '${required_text}':\n${serial_ports_inspect_stdout}")
+    endif()
+endforeach()
+
 set(analog_threshold_output "${OUTPUT_DIR}/analog-threshold-pwm.rsfw")
 execute_process(
     COMMAND "${RSMA_BUILD}" "${SOURCE_DIR}/analog_threshold_pwm.cpp" -o "${analog_threshold_output}"
@@ -452,7 +478,8 @@ endforeach()
 foreach(fixture_and_message IN ITEMS
         "unsupported_global_type.cpp|global variables currently support only int and bool"
         "unsupported_global_initializer.cpp|expected a compile-time integer constant"
-        "millis_argument.cpp|no matching function for call to 'millis'")
+        "millis_argument.cpp|no matching function for call to 'millis'"
+        "serial_custom_object.cpp|call target 'begin' has no definition in this source")
     string(REPLACE "|" ";" fixture_fields "${fixture_and_message}")
     list(GET fixture_fields 0 fixture_name)
     list(GET fixture_fields 1 expected_message)

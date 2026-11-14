@@ -44,6 +44,9 @@ public:
 };
 
 extern SerialPort Serial;
+extern SerialPort Serial1;
+extern SerialPort Serial2;
+extern SerialPort Serial3;
 #define DMA_INVALID (-1)
 #define DMA_QUEUE_FULL (-2)
 #define DMA_QUEUED 0

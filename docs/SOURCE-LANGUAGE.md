@@ -46,10 +46,11 @@ unsigned arithmetic contract.
 функцией `void handler()` и понижается в `ATTACH_IRQ`/`ENABLE_IRQ`.
 `detachInterrupt(pin)` понижает в `DETACH_IRQ` и удаляет binding только этого pin.
 Общая семантика function pointers не поддерживается.
-UART port 0 доступен через builtin facade `Serial`: `Serial.begin(preset)` с
-compile-time preset `0..4`, `Serial.available()`, `Serial.read()` и
-`Serial.write(value)`. Эти методы понижаются в HAL services `UartBegin`,
-`UartAvailable`, `UartRead` и `UartWrite`; произвольные пользовательские
+UART ports `0..3` доступны через builtin facades `Serial`, `Serial1`, `Serial2`
+и `Serial3`: каждый объект предоставляет `begin(preset)` с compile-time preset
+`0..4`, `available()`, `read()` и `write(value)`. Объекты жёстко связаны с
+портами `0..3` и понижаются в HAL services `UartBegin`, `UartAvailable`,
+`UartRead` и `UartWrite`; произвольные пользовательские `SerialPort` objects и
 classes/member calls frontend не поддерживает.
 `spiTransfer(bus, value)` и `i2cTransfer(address, value)` принимают route/address
 как compile-time integer и TX byte как runtime expression; они понижаются в

@@ -335,11 +335,11 @@ Source-level `attachInterrupt()`/`detachInterrupt()` также завершён
 generated firmware, negative builder cases и Unity edge/detach acceptance
 покрыты. Общие function pointers и `micros()` остаются вне текущего scope.
 
-Source-level UART v1 завершён для builtin `Serial` facade port 0: `begin`,
-`available`, `read`, `write`, compile-time baud validation, generated echo
-firmware, FIFO-driven Unity acceptance, UART trace и invalid preset test
-покрыты. `Serial1+`, callbacks и packet framing остаются следующими
-расширениями.
+Source-level UART v1 завершён для builtin facades `Serial`/`Serial1`/`Serial2`/
+`Serial3` ports `0..3`: `begin`, `available`, `read`, `write`, compile-time
+baud validation, generated echo and multi-port firmware, FIFO-driven Unity
+acceptance, UART trace и invalid preset/custom-object tests покрыты. Callbacks
+и packet framing остаются следующими расширениями.
 
 UART RX scheduling v1 также завершён: `VirtualUartBank` принимает timestamped
 packets с детерминированным FIFO/insertion ordering, VM учитывает UART input

@@ -71,10 +71,11 @@ HAL_GetTick();
 
 В bytecode `UartAvailable` и `UartRead` помещают результат на stack. `UartWrite` снимает одно целое значение со stack и принимает только диапазон `0..255`. Пример прошивки с polling и echo находится в `examples/uart_echo.cpp`.
 
-Source-level facade `Serial` использует UART port `0`: `begin(baudPreset)`
-принимает presets `0..4` (`9600..115200`), `available()` возвращает размер RX
-FIFO, `read()` извлекает следующий byte, а `write(value)` создаёт внешний
-`UartTransmit` trace event. RX injection и FIFO overflow остаются
+Source-level facades `Serial`, `Serial1`, `Serial2` и `Serial3` используют
+UART ports `0..3` соответственно. `begin(baudPreset)` принимает presets `0..4`
+(`9600..115200`), `available()` возвращает размер RX FIFO, `read()` извлекает
+следующий byte, а `write(value)` создаёт внешний `UartTransmit` trace event.
+RX injection и FIFO overflow остаются
 host/backend operations; polling не продвигает simulated time без `delay()` или
 `yield()`.
 
