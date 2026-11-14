@@ -114,6 +114,12 @@ simulated timestamp, channel/value и optional message. Trace доступен �
 из standalone `VirtualMachine` и Unity `RSMAVirtualMicrocontroller`; переполнение
 буфера отбрасывает старые события и увеличивает `DroppedEventCount`.
 
+Source-level `millis()` использует тот же simulated clock: вызов не продвигает
+время и возвращает timestamp текущей VM точки исполнения в миллисекундах.
+После `delay()`/`WAIT` значение отражает достигнутое время, что позволяет
+строить deterministic elapsed-time control logic без зависимости от Unity frame
+timing.
+
 ## 6. Целевой контракт sensor/control platform
 
 Для полноценной разработки прикладной системы HAL должен описывать не только

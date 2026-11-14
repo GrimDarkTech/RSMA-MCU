@@ -23,6 +23,7 @@ int dmaReadByte(int ticket, int offset);
 int dmaRelease(int ticket);
 int eepromRead(int address);
 void eepromWrite(int address, int value);
+unsigned long millis();
 void delay(unsigned int milliseconds);
 void yield();
 

@@ -311,7 +311,7 @@ void emit_expression(CXCursor cursor, BodyContext& context)
             function.name == "dmaTransfer" || function.name == "eepromRead" ||
             function.name == "dmaBufferRead" || function.name == "dmaSubmit" ||
             function.name == "dmaStatus" || function.name == "dmaReadByte" ||
-            function.name == "dmaRelease") {
+            function.name == "dmaRelease" || function.name == "millis") {
             if (!is_builtin_hal_declaration(function.declaration))
                 fail_at(cursor, "HAL call must resolve to the declaration in <rsma_mcu/Arduino.h>");
             const auto argumentCount = clang_Cursor_getNumArguments(cursor);
@@ -322,6 +322,13 @@ void emit_expression(CXCursor cursor, BodyContext& context)
                 append_hal_call(*context.program,
                     function.name == "dmaStatus" ? HalService::DmaStatus : HalService::DmaRelease, 0, 0);
                 context.peripherals->emplace_back("DMA");
+                return;
+            }
+            if (function.name == "millis") {
+                if (clang_Cursor_getNumArguments(cursor) != 0)
+                    fail_at(cursor, "millis expects no arguments");
+                append_hal_call(*context.program, HalService::Millis, 0, 0);
+                context.peripherals->emplace_back("SYSTICK");
                 return;
             }
             if (function.name == "dmaBufferRead") {
@@ -558,7 +565,7 @@ void lower_call(CXCursor cursor, BodyContext& context)
         name == "i2cTransfer" || name == "dmaTransfer" || name == "eepromRead" ||
         name == "eepromWrite" || name == "dmaBufferWrite" || name == "dmaBufferRead" ||
         name == "dmaSubmit" || name == "dmaStatus" || name == "dmaReadByte" ||
-        name == "dmaRelease" || name == "delay" || name == "yield";
+        name == "dmaRelease" || name == "millis" || name == "delay" || name == "yield";
     if (halName && !is_builtin_hal_declaration(function.declaration)) {
         fail_at(cursor, "HAL call must resolve to the declaration in <rsma_mcu/Arduino.h>");
     }
@@ -687,6 +694,12 @@ void lower_call(CXCursor cursor, BodyContext& context)
         if (argumentCount != 1) fail_at(cursor, "digitalRead expects one argument");
         append_hal_call(program, HalService::DigitalRead, byteArgument(0, "pin"), 0);
         peripherals.emplace_back("GPIO");
+        return;
+    }
+    if (name == "millis") {
+        if (argumentCount != 0) fail_at(cursor, "millis expects no arguments");
+        append_hal_call(program, HalService::Millis, 0, 0);
+        peripherals.emplace_back("SYSTICK");
         return;
     }
     if (name == "analogRead") {

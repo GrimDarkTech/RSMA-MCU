@@ -27,7 +27,7 @@ int main()
 циклы; статическая память. Первый исполняемый срез `rsma-build` уже использует
 Clang для разбора C++, но пока принимает в `main()` только прямые вызовы
 `pinMode(pin, INPUT|OUTPUT)`, `digitalWrite(pin, LOW|HIGH)`, `digitalRead(pin)`,
-`delay(constant)` и `return [constant]`. Поддерживаются локальные `int`/`bool`
+`millis()`, `delay(constant)` и `return [constant]`. Поддерживаются локальные `int`/`bool`
 переменные, простые присваивания, сложение/вычитание, сравнения `==`, `!=`, `<`,
 `<=`, `>`, `>=`, логическое `!`, а также runtime `if/else`, `while` и простой
 `for (int i = start; i < end; ++i)`/`--i`. Runtime
@@ -36,6 +36,11 @@ Clang для разбора C++, но пока принимает в `main()` т
 текущий `Advance()` до следующего host tick, не добавляя времени ожидания.
 `analogRead(channel)` принимает compile-time channel `0..255` и понижает в
 `HAL_CALL` service `AnalogRead`; runtime возвращает 12-bit sample `0..4095`.
+`millis()` не принимает аргументов и понижается в `HAL_CALL` service `Millis`;
+runtime возвращает текущее deterministic simulated time в миллисекундах.
+Значение доступно как `int` expression в текущем frontend/VM integer model;
+переполнение за пределами signed VM range пока не моделируется как отдельный
+unsigned arithmetic contract.
 `spiTransfer(bus, value)` и `i2cTransfer(address, value)` принимают route/address
 как compile-time integer и TX byte как runtime expression; они понижаются в
 stack-based `HAL_CALL`, возвращая RX byte как `int`. SPI bus ограничен `0..255`,

@@ -107,6 +107,32 @@ foreach(required_text "HAL_CALL" "HALT" "Peripherals: ADC")
     endif()
 endforeach()
 
+set(millis_output "${OUTPUT_DIR}/millis-control.rsfw")
+execute_process(
+    COMMAND "${RSMA_BUILD}" "${SOURCE_DIR}/millis_control.cpp" -o "${millis_output}"
+    RESULT_VARIABLE millis_result
+    OUTPUT_VARIABLE millis_stdout
+    ERROR_VARIABLE millis_stderr
+)
+if(NOT millis_result EQUAL 0)
+    message(FATAL_ERROR "rsma-build rejected millis() fixture:\n${millis_stdout}\n${millis_stderr}")
+endif()
+execute_process(
+    COMMAND "${RSMA_INSPECT}" "${millis_output}"
+    RESULT_VARIABLE millis_inspect_result
+    OUTPUT_VARIABLE millis_inspect_stdout
+    ERROR_VARIABLE millis_inspect_stderr
+)
+if(NOT millis_inspect_result EQUAL 0)
+    message(FATAL_ERROR "millis firmware is invalid:\n${millis_inspect_stderr}")
+endif()
+foreach(required_text "HAL_CALL" "WAIT" "HALT" "Peripherals: GPIO SYSTICK")
+    string(FIND "${millis_inspect_stdout}" "${required_text}" millis_text_index)
+    if(millis_text_index EQUAL -1)
+        message(FATAL_ERROR "millis firmware is missing '${required_text}':\n${millis_inspect_stdout}")
+    endif()
+endforeach()
+
 set(analog_threshold_output "${OUTPUT_DIR}/analog-threshold-pwm.rsfw")
 execute_process(
     COMMAND "${RSMA_BUILD}" "${SOURCE_DIR}/analog_threshold_pwm.cpp" -o "${analog_threshold_output}"
@@ -373,7 +399,8 @@ endforeach()
 
 foreach(fixture_and_message IN ITEMS
         "unsupported_global_type.cpp|global variables currently support only int and bool"
-        "unsupported_global_initializer.cpp|expected a compile-time integer constant")
+        "unsupported_global_initializer.cpp|expected a compile-time integer constant"
+        "millis_argument.cpp|no matching function for call to 'millis'")
     string(REPLACE "|" ";" fixture_fields "${fixture_and_message}")
     list(GET fixture_fields 0 fixture_name)
     list(GET fixture_fields 1 expected_message)

@@ -324,6 +324,11 @@ UART frames, actuator outputs и faults.
 прототипом VM/HAL, а не готовой платформой для полноценной sensor/control
 разработки.
 
+Source-level `millis()` завершён: declaration, Clang lowering в `HAL_CALL
+Millis`, deterministic VM implementation, generated `.rsfw`, Unity PlayMode
+acceptance и negative argument test покрыты. `micros()` и unsigned overflow
+semantics остаются отдельным следующим расширением.
+
 Benchmark baseline для virtual VM зафиксирован локальным Unity EditMode
 прогоном `VirtualMcuPerformanceTests` на Unity `6000.3.16f1`, Windows Editor,
 Mono, Ryzen 5 3600. Workload использует 8192 операций и 12 измерений после
