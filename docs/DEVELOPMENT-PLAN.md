@@ -102,10 +102,12 @@ completion по simulated time; C++ facade предоставляет submit/sta
 profile-aware validation и Unity mappings для `RSMA-STM32F103` и
 `RSMA-AVR-ATmega328P`; AVR profile намеренно не поддерживает DMA.
 
-### Следующая доработка: `VirtualAnalogSensor`
+### Реализовано: `VirtualAnalogSensor`
 
-Нужно добавить Unity-компонент виртуального аналогового датчика и подключить его
-к ADC channel через единый Emulator backend. Компонент должен поддерживать:
+Добавлен Unity-компонент виртуального аналогового датчика, подключённый к ADC
+channel через Emulator backend и simulated time. Pure C# model отделена от
+Unity-компонента, поэтому waveform/calibration/noise тестируются без сцены.
+Поддерживаются:
 
 - источник сигнала `waveform`: constant, ramp, sine и пользовательская кривая;
 - детерминированный noise с фиксируемым seed и настраиваемой амплитудой;
@@ -118,15 +120,17 @@ profile-aware validation и Unity mappings для `RSMA-STM32F103` и
 - диагностику неподключённого channel, выхода за диапазон и несовместимого
   board/pin mapping.
 
-Датчик не должен напрямую вызывать firmware или VM: он публикует значение в
-  backend, а прошивка получает его только через `analogRead(channel)`. Runtime
-  должен использовать simulated time, чтобы одинаковые seed, waveform и
-  sampling settings давали воспроизводимый результат в EditMode и PlayMode.
+Датчик не вызывает firmware или VM напрямую: он регистрирует sampler в ADC
+backend, а прошивка получает значение только через `analogRead(channel)`.
+Runtime обновляет sampler при продвижении simulated time, поэтому одинаковые
+seed, waveform и sampling settings дают воспроизводимый результат независимо
+от порядка Unity frames. Duplicate ADC channel и unmapped scene channel
+диагностируются при регистрации.
 
-Критерий готовности: пример `VirtualAnalogSensor -> analogRead -> threshold ->
-GPIO/PWM output` собирается из C++ через `rsma-build`, запускается в Unity scene,
-проверяет calibration/noise/sampling и фиксирует output trace; disconnected
-sensor и invalid mapping завершаются диагностируемой ошибкой до запуска firmware.
+Проверки: model waveform/sample-and-hold/deterministic-noise/calibration,
+backend registration и `VirtualMachine -> analogRead` по simulated time покрыты
+EditMode tests. Остался end-to-end scene test с собранным C++ firmware и
+физически наблюдаемым GPIO/PWM output как часть следующих P0/P1 vertical slices.
 
 ## Этап 7. Полноценная разработка систем «датчики -> управление»
 

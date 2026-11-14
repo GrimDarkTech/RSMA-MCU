@@ -81,9 +81,9 @@ HAL_GetTick();
 int sample = analogRead(channel); // 0..4095
 ```
 
-Следующий Emulator increment — `VirtualAnalogSensor`, подключённый к ADC
-channel через backend. Sensor model должен отделять физический сигнал от
-firmware ADC-контракта и задавать:
+`VirtualAnalogSensor` реализован как Unity component, подключённый к ADC
+channel через backend. Pure C# sensor model отделяет физический сигнал от
+firmware ADC-контракта и задаёт:
 
 - `waveform`: constant, ramp, sine или пользовательская кривая;
 - deterministic `noise` с seed и амплитудой;
@@ -92,15 +92,18 @@ firmware ADC-контракта и задавать:
 - physical `units` для инспектора и telemetry.
 
 Сигнал вычисляется по simulated time и становится доступен прошивке только
-через `analogRead(channel)`. Sensor не вызывает VM напрямую. Один channel
-должен иметь однозначное подключение; отсутствующий sensor, invalid mapping и
-некорректный ADC range должны диагностироваться до запуска firmware. Raw
-значение после calibration ограничивается диапазоном `0..4095`, а units не
-влияют на значение, видимое firmware.
+через `analogRead(channel)`. Sensor не вызывает VM напрямую: он регистрирует
+sampler в `IVirtualAnalogInputSource`, а runtime обновляет sample при движении
+виртуального времени. Один channel должен иметь однозначное подключение;
+duplicate sensor, отсутствующий scene mapping и некорректный ADC range
+диагностируются при регистрации. Raw значение после calibration ограничивается
+диапазоном `0..4095`, а units не влияют на значение, видимое firmware.
 
-Контракт считается готовым после end-to-end теста `VirtualAnalogSensor ->
-analogRead -> threshold -> GPIO/PWM output` с проверкой waveform, noise seed,
-sampling, calibration и disconnected-sensor error в Unity EditMode/PlayMode.
+Model и backend contract покрыты Unity EditMode tests для waveform, sample-and-
+hold, deterministic noise seed, calibration, duplicate channel и
+`analogRead` по simulated time. Полная готовность sensor/control vertical slice
+требует дополнительного scene-теста `VirtualAnalogSensor -> analogRead ->
+threshold -> GPIO/PWM output` с firmware, собранной `rsma-build`.
 
 ## 6. Целевой контракт sensor/control platform
 
