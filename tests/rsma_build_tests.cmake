@@ -211,6 +211,32 @@ foreach(required_text "HAL_CALL" "WAIT" "HALT" "Peripherals: UART SYSTICK")
     endif()
 endforeach()
 
+set(serial_callback_output "${OUTPUT_DIR}/serial-callback.rsfw")
+execute_process(
+    COMMAND "${RSMA_BUILD}" "${SOURCE_DIR}/serial_callback.cpp" -o "${serial_callback_output}"
+    RESULT_VARIABLE serial_callback_result
+    OUTPUT_VARIABLE serial_callback_stdout
+    ERROR_VARIABLE serial_callback_stderr
+)
+if(NOT serial_callback_result EQUAL 0)
+    message(FATAL_ERROR "rsma-build rejected UART receive callback fixture:\n${serial_callback_stdout}\n${serial_callback_stderr}")
+endif()
+execute_process(
+    COMMAND "${RSMA_INSPECT}" "${serial_callback_output}"
+    RESULT_VARIABLE serial_callback_inspect_result
+    OUTPUT_VARIABLE serial_callback_inspect_stdout
+    ERROR_VARIABLE serial_callback_inspect_stderr
+)
+if(NOT serial_callback_inspect_result EQUAL 0)
+    message(FATAL_ERROR "UART receive callback firmware is invalid:\n${serial_callback_inspect_stderr}")
+endif()
+foreach(required_text "ATTACH_UART_RX" "RETURN_UART_RX" "HAL_CALL" "WAIT" "HALT" "Peripherals: UART SYSTICK")
+    string(FIND "${serial_callback_inspect_stdout}" "${required_text}" serial_callback_text_index)
+    if(serial_callback_text_index EQUAL -1)
+        message(FATAL_ERROR "UART receive callback firmware is missing '${required_text}':\n${serial_callback_inspect_stdout}")
+    endif()
+endforeach()
+
 set(analog_threshold_output "${OUTPUT_DIR}/analog-threshold-pwm.rsfw")
 execute_process(
     COMMAND "${RSMA_BUILD}" "${SOURCE_DIR}/analog_threshold_pwm.cpp" -o "${analog_threshold_output}"

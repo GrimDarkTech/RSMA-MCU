@@ -36,6 +36,9 @@ enum class Opcode : std::uint8_t
     GlobalStore = 0x19,
     Yield = 0x1A,
     DetachIrq = 0x1B,
+    AttachUartRx = 0x1C,
+    DetachUartRx = 0x1D,
+    ReturnUartRx = 0x1E,
 };
 
 constexpr std::uint16_t kBytecodeVersion = 1;
@@ -101,6 +104,9 @@ constexpr std::string_view opcode_name(Opcode opcode)
     case Opcode::GlobalStore: return "GLOBAL_STORE";
     case Opcode::Yield: return "YIELD";
     case Opcode::DetachIrq: return "DETACH_IRQ";
+    case Opcode::AttachUartRx: return "ATTACH_UART_RX";
+    case Opcode::DetachUartRx: return "DETACH_UART_RX";
+    case Opcode::ReturnUartRx: return "RETURN_UART_RX";
     }
     return "UNKNOWN";
 }

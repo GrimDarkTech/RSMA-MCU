@@ -52,6 +52,15 @@ UART ports `0..3` доступны через builtin facades `Serial`, `Serial1
 портами `0..3` и понижаются в HAL services `UartBegin`, `UartAvailable`,
 `UartRead` и `UartWrite`; произвольные пользовательские `SerialPort` objects и
 classes/member calls frontend не поддерживает.
+Каждая facade также предоставляет `attachReceive(void handler())` и
+`detachReceive()`. Handler должен быть определён в этом source-файле и иметь
+ровно сигнатуру `void handler()`. Binding относится к выбранному порту;
+повторный `attachReceive` заменяет предыдущий handler этого порта, а
+`detachReceive` не затрагивает остальные порты. Доставленный RX byte сначала
+попадает в FIFO и записывается как `UartReceive`, после чего VM ставит callback
+в deterministic event queue. В callback можно использовать `available()` и
+`read()` выбранной facade; возврат выполняется через `RETURN_UART_RX`.
+Callback не re-enters сам себя: новые RX bytes накапливаются до его возврата.
 `spiTransfer(bus, value)` и `i2cTransfer(address, value)` принимают route/address
 как compile-time integer и TX byte как runtime expression; они понижаются в
 stack-based `HAL_CALL`, возвращая RX byte как `int`. SPI bus ограничен `0..255`,

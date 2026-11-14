@@ -338,13 +338,19 @@ generated firmware, negative builder cases и Unity edge/detach acceptance
 Source-level UART v1 завершён для builtin facades `Serial`/`Serial1`/`Serial2`/
 `Serial3` ports `0..3`: `begin`, `available`, `read`, `write`, compile-time
 baud validation, generated echo and multi-port firmware, FIFO-driven Unity
-acceptance, UART trace и invalid preset/custom-object tests покрыты. Callbacks
-и packet framing остаются следующими расширениями.
+acceptance, UART trace и invalid preset/custom-object tests покрыты.
 
 UART RX scheduling v1 также завершён: `VirtualUartBank` принимает timestamped
 packets с детерминированным FIFO/insertion ordering, VM учитывает UART input
-events при ожидании, а `UartReceive` добавлен в trace contract. Полноценные
-callbacks и packet framing по-прежнему не входят в source API.
+events при ожидании, а `UartReceive` добавлен в trace contract.
+
+Source-level UART RX callbacks завершены для всех builtin facades:
+`attachReceive(void handler())`/`detachReceive()` проходят strict named-handler
+validation, function-entry patching и `ATTACH_UART_RX`/`DETACH_UART_RX` lowering;
+VM dispatch выполняется после FIFO delivery через отдельный non-reentrant
+callback state и `RETURN_UART_RX`. Generated callback fixture, trace ordering
+`UartReceive -> UartCallback -> UartTransmit` и PlayMode acceptance покрыты.
+Packet framing/HITL integration остаются следующим расширением.
 
 Benchmark baseline для virtual VM зафиксирован локальным Unity EditMode
 прогоном `VirtualMcuPerformanceTests` на Unity `6000.3.16f1`, Windows Editor,

@@ -36,6 +36,9 @@ bool is_known_opcode(Opcode opcode)
     case Opcode::GlobalStore:
     case Opcode::Yield:
     case Opcode::DetachIrq:
+    case Opcode::AttachUartRx:
+    case Opcode::DetachUartRx:
+    case Opcode::ReturnUartRx:
         return true;
     }
     return false;
@@ -88,13 +91,27 @@ ValidationResult validate_firmware(const FirmwarePackage& package)
         if (instruction.opcode == Opcode::Nop || instruction.opcode == Opcode::Halt ||
             instruction.opcode == Opcode::AddI32 || instruction.opcode == Opcode::SubI32 ||
             instruction.opcode == Opcode::CmpEqI32 || instruction.opcode == Opcode::CmpNeI32 ||
-            instruction.opcode == Opcode::CmpLtI32 || instruction.opcode == Opcode::CmpLeI32 ||
-            instruction.opcode == Opcode::CmpGtI32 || instruction.opcode == Opcode::CmpGeI32 ||
-            instruction.opcode == Opcode::Return || instruction.opcode == Opcode::ReadTime ||
-            instruction.opcode == Opcode::Yield) {
+            instruction.opcode == Opcode::CmpGeI32 ||
+            instruction.opcode == Opcode::CmpGtI32 || instruction.opcode == Opcode::ReturnIrq ||
+            instruction.opcode == Opcode::ReturnUartRx || instruction.opcode == Opcode::Yield) {
             if (!instruction.operands.empty()) {
                 return ValidationResult::failure("operandless instruction has operands");
             }
+        }
+        if (instruction.opcode == Opcode::DetachUartRx) {
+            if (instruction.operands.size() != 1 || instruction.operands[0] >= 4)
+                return ValidationResult::failure("DETACH_UART_RX contains an invalid port");
+        }
+        if (instruction.opcode == Opcode::AttachUartRx) {
+            if (instruction.operands.size() != 5 || instruction.operands[0] >= 4) {
+                return ValidationResult::failure("ATTACH_UART_RX contains an invalid port or operands");
+            }
+            const auto target = static_cast<std::uint32_t>(instruction.operands[1]) |
+                (static_cast<std::uint32_t>(instruction.operands[2]) << 8) |
+                (static_cast<std::uint32_t>(instruction.operands[3]) << 16) |
+                (static_cast<std::uint32_t>(instruction.operands[4]) << 24);
+            if (target >= package.bytecode.instructions.size())
+                return ValidationResult::failure("ATTACH_UART_RX target is outside instruction list");
         }
         if (instruction.opcode == Opcode::EnableIrq || instruction.opcode == Opcode::DisableIrq ||
             instruction.opcode == Opcode::ReturnIrq) {

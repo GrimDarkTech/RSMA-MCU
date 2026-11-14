@@ -86,6 +86,15 @@ data)` планирует RX packet на абсолютное simulated time. С
 После доставки каждый byte генерирует `UartReceive` trace event; непосредственный
 `InjectReceived` сохраняет прежнюю семантику немедленной host-инъекции.
 
+Source-level UART callbacks используют `Serial.attachReceive(handler)` и
+`Serial.detachReceive()` (аналогично для `Serial1`–`Serial3`). Frontend
+понижает их в `ATTACH_UART_RX`/`DETACH_UART_RX`; operand layout — порт `u8` и
+адрес bytecode handler `u32`. Handler завершается `RETURN_UART_RX`, сохраняет
+прерванное состояние VM и не смешивается с GPIO `RETURN_IRQ`. Callback
+диспетчеризуется после `UartReceive`, когда byte уже доступен в FIFO; trace
+порядок для echo: `UartReceive -> UartCallback -> UartTransmit`.
+Dispatch non-reentrant, а queued receives сохраняют FIFO/insertion ordering.
+
 Значения частоты и задержки должны иметь фиксированные единицы и явно документированную точность. Сетевой backend не должен передавать каждую VM-инструкцию; границей обмена являются периферийные события.
 
 ## 5. ADC и виртуальный аналоговый датчик
@@ -123,7 +132,8 @@ analogWrite -> RSMAGPIO PWM output`, а unmapped ADC channel завершает�
 
 Для observability VM предоставляет bounded `VirtualTraceBuffer` и события
 `TimeAdvanced`, `AnalogSample`, `DigitalOutput`, `PwmOutput`, `HalCall`,
-`StateTransition`, `Interrupt`, `UartTransmit`, `RejectedMapping` и `Fault`.
+`StateTransition`, `Interrupt`, `UartCallback`, `UartTransmit`, `UartReceive`,
+`RejectedMapping` и `Fault`.
 Каждое событие содержит monotonic sequence,
 simulated timestamp, channel/value и optional message. Trace доступен одинаково
 из standalone `VirtualMachine` и Unity `RSMAVirtualMicrocontroller`; переполнение

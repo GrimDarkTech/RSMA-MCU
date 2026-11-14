@@ -165,6 +165,12 @@ struct PendingInterruptBinding
     CXCursor target;
 };
 
+struct PendingUartReceiveBinding
+{
+    std::size_t instruction;
+    CXCursor target;
+};
+
 struct FunctionLayout
 {
     CXCursor function;
@@ -177,7 +183,9 @@ struct CompileContext
     std::vector<CXCursor> functions;
     std::vector<PendingCall> calls;
     std::vector<PendingInterruptBinding> interruptBindings;
+    std::vector<PendingUartReceiveBinding> uartReceiveBindings;
     std::vector<CXCursor> interruptHandlers;
+    std::vector<CXCursor> uartReceiveHandlers;
     std::vector<std::pair<CXCursor, std::uint32_t>> functionEntries;
     std::vector<FunctionLayout> layouts;
     std::vector<std::pair<CXCursor, std::uint16_t>> globals;
@@ -221,6 +229,7 @@ struct BodyContext
     bool returnsInt;
     bool hasCallFrame;
     bool isInterruptHandler;
+    bool isUartReceiveHandler;
     std::vector<std::pair<CXCursor, std::uint16_t>> locals;
     std::uint16_t nextSlot = 0;
     bool terminated = false;
@@ -621,7 +630,8 @@ int serial_port_for_call(CXCursor cursor, const ResolvedFunction& function)
     if (ClangString(clang_getCursorSpelling(parent)).str() != "SerialPort")
         return -1;
     if (function.name != "begin" && function.name != "available" &&
-        function.name != "read" && function.name != "write")
+        function.name != "read" && function.name != "write" &&
+        function.name != "attachReceive" && function.name != "detachReceive")
         return -1;
 
     const auto receiver = first_receiver_declref(cursor);
@@ -713,6 +723,40 @@ void lower_call(CXCursor cursor, BodyContext& context)
     };
 
     if (serialMember) {
+        if (name == "attachReceive") {
+            if (argumentCount != 1)
+                fail_at(cursor, "Serial.attachReceive expects one handler argument");
+            const auto handlerArgument = argument(0);
+            const auto handlerReference = unwrap_function_reference(handlerArgument);
+            if (clang_Cursor_isNull(handlerReference))
+                fail_at(handlerArgument, "UART receive handler must be a named void() function");
+            const auto handlerDeclaration = clang_getCursorReferenced(handlerReference);
+            const auto handler = find_function_definition(handlerDeclaration, *context.compiler);
+            if (clang_Cursor_isNull(handler))
+                fail_at(handlerArgument, "UART receive handler must be defined in this source");
+            if (clang_Cursor_getNumArguments(handler) != 0 ||
+                ClangString(clang_getTypeSpelling(clang_getCursorResultType(handler))).str() != "void")
+                fail_at(handlerArgument, "UART receive handler must have signature void handler()");
+
+            const auto instruction = program.instructions.size();
+            program.instructions.push_back({Opcode::AttachUartRx,
+                Bytes{static_cast<Byte>(serialPort), 0, 0, 0, 0}});
+            context.compiler->uartReceiveBindings.push_back({instruction, handler});
+            if (std::find_if(context.compiler->uartReceiveHandlers.begin(),
+                    context.compiler->uartReceiveHandlers.end(),
+                    [&](const auto candidate) { return clang_equalCursors(candidate, handler); }) ==
+                context.compiler->uartReceiveHandlers.end())
+                context.compiler->uartReceiveHandlers.push_back(handler);
+            peripherals.emplace_back("UART");
+            return;
+        }
+        if (name == "detachReceive") {
+            if (argumentCount != 0)
+                fail_at(cursor, "Serial.detachReceive expects no arguments");
+            program.instructions.push_back({Opcode::DetachUartRx, {static_cast<Byte>(serialPort)}});
+            peripherals.emplace_back("UART");
+            return;
+        }
         if (name == "available" || name == "read") {
             if (argumentCount != 0)
                 fail_at(cursor, "Serial.available/read expects no arguments");
@@ -1034,7 +1078,8 @@ CXChildVisitResult lower_statement(CXCursor cursor, CXCursor, CXClientData clien
             } else {
                 if (!children.cursors.empty()) fail_at(cursor, "void function cannot return a value");
                 context.program->instructions.push_back({
-                    context.isInterruptHandler ? Opcode::ReturnIrq : Opcode::Return, {}});
+                    context.isUartReceiveHandler ? Opcode::ReturnUartRx :
+                        context.isInterruptHandler ? Opcode::ReturnIrq : Opcode::Return, {}});
             }
             context.terminated = true;
             return CXChildVisit_Continue;
@@ -1245,7 +1290,8 @@ FirmwarePackage compile_source(const std::filesystem::path& sourcePath)
             const auto resultType = ClangString(clang_getTypeSpelling(clang_getCursorResultType(function))).str();
             const auto entry = current_instruction(BodyContext{
                 &package.bytecode, &peripherals, &compiler, function,
-                static_cast<std::uint32_t>(package.bytecode.instructions.size()), isMain, resultType == "int"});
+                static_cast<std::uint32_t>(package.bytecode.instructions.size()), isMain, resultType == "int",
+                !isMain, false, false});
             compiler.functionEntries.emplace_back(function, entry);
             const auto layout = std::find_if(compiler.layouts.begin(), compiler.layouts.end(),
                 [&](const FunctionLayout& candidate) { return clang_equalCursors(candidate.function, function); });
@@ -1255,6 +1301,8 @@ FirmwarePackage compile_source(const std::filesystem::path& sourcePath)
                 &package.bytecode, &peripherals, &compiler, function, entry, isMain,
                 resultType == "int", !isMain,
                 std::any_of(compiler.interruptHandlers.begin(), compiler.interruptHandlers.end(),
+                    [&](const auto handler) { return clang_equalCursors(handler, function); }),
+                std::any_of(compiler.uartReceiveHandlers.begin(), compiler.uartReceiveHandlers.end(),
                     [&](const auto handler) { return clang_equalCursors(handler, function); })};
             if (!isMain) {
                 bodyContext.locals = layout->locals;
@@ -1278,8 +1326,11 @@ FirmwarePackage compile_source(const std::filesystem::path& sourcePath)
             if (bodyContext.failure) std::rethrow_exception(bodyContext.failure);
             if (!bodyContext.terminated) {
                 if (isMain) package.bytecode.instructions.push_back({Opcode::Halt, {}});
-                else if (resultType == "void") package.bytecode.instructions.push_back({
-                    bodyContext.isInterruptHandler ? Opcode::ReturnIrq : Opcode::Return, {}});
+                else if (resultType == "void") {
+                    package.bytecode.instructions.push_back({
+                        bodyContext.isUartReceiveHandler ? Opcode::ReturnUartRx :
+                            bodyContext.isInterruptHandler ? Opcode::ReturnIrq : Opcode::Return, {}});
+                }
                 else fail_at(function, "int function must return a value on every path");
             }
         }
@@ -1317,6 +1368,23 @@ FirmwarePackage compile_source(const std::filesystem::path& sourcePath)
             }
             if (!patched)
                 throw FirmwareError("internal compiler error: unresolved interrupt handler");
+        }
+
+        for (const auto& pending : compiler.uartReceiveBindings) {
+            bool patched = false;
+            for (const auto& entry : compiler.functionEntries) {
+                if (clang_equalCursors(entry.first, pending.target)) {
+                    auto& instruction = package.bytecode.instructions.at(pending.instruction);
+                    instruction.operands[1] = static_cast<Byte>(entry.second);
+                    instruction.operands[2] = static_cast<Byte>(entry.second >> 8);
+                    instruction.operands[3] = static_cast<Byte>(entry.second >> 16);
+                    instruction.operands[4] = static_cast<Byte>(entry.second >> 24);
+                    patched = true;
+                    break;
+                }
+            }
+            if (!patched)
+                throw FirmwareError("internal compiler error: unresolved UART receive handler");
         }
 
         Bytes symbols;

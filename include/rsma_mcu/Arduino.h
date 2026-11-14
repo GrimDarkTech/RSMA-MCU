@@ -41,6 +41,8 @@ public:
     int available();
     int read();
     void write(int value);
+    void attachReceive(void (*handler)());
+    void detachReceive();
 };
 
 extern SerialPort Serial;
