@@ -158,6 +158,12 @@ struct PendingCall
     CXCursor caller;
 };
 
+struct PendingInterruptBinding
+{
+    std::size_t instruction;
+    CXCursor target;
+};
+
 struct FunctionLayout
 {
     CXCursor function;
@@ -169,6 +175,8 @@ struct CompileContext
 {
     std::vector<CXCursor> functions;
     std::vector<PendingCall> calls;
+    std::vector<PendingInterruptBinding> interruptBindings;
+    std::vector<CXCursor> interruptHandlers;
     std::vector<std::pair<CXCursor, std::uint32_t>> functionEntries;
     std::vector<FunctionLayout> layouts;
     std::vector<std::pair<CXCursor, std::uint16_t>> globals;
@@ -209,6 +217,7 @@ struct BodyContext
     bool isMain;
     bool returnsInt;
     bool hasCallFrame;
+    bool isInterruptHandler;
     std::vector<std::pair<CXCursor, std::uint16_t>> locals;
     std::uint16_t nextSlot = 0;
     bool terminated = false;
@@ -272,6 +281,19 @@ std::vector<CXCursor> cursor_children(CXCursor cursor)
     CallChildren children;
     clang_visitChildren(cursor, collect_call_children, &children);
     return std::move(children.cursors);
+}
+
+CXCursor unwrap_function_reference(CXCursor cursor)
+{
+    const auto kind = clang_getCursorKind(cursor);
+    if (kind == CXCursor_DeclRefExpr)
+        return cursor;
+    if (kind != CXCursor_ParenExpr && kind != CXCursor_UnexposedExpr)
+        return clang_getNullCursor();
+    const auto children = cursor_children(cursor);
+    if (children.size() != 1)
+        return clang_getNullCursor();
+    return unwrap_function_reference(children.front());
 }
 
 void emit_expression(CXCursor cursor, BodyContext& context)
@@ -565,7 +587,8 @@ void lower_call(CXCursor cursor, BodyContext& context)
         name == "i2cTransfer" || name == "dmaTransfer" || name == "eepromRead" ||
         name == "eepromWrite" || name == "dmaBufferWrite" || name == "dmaBufferRead" ||
         name == "dmaSubmit" || name == "dmaStatus" || name == "dmaReadByte" ||
-        name == "dmaRelease" || name == "millis" || name == "delay" || name == "yield";
+        name == "dmaRelease" || name == "millis" || name == "delay" || name == "yield" ||
+        name == "attachInterrupt" || name == "detachInterrupt";
     if (halName && !is_builtin_hal_declaration(function.declaration)) {
         fail_at(cursor, "HAL call must resolve to the declaration in <rsma_mcu/Arduino.h>");
     }
@@ -694,6 +717,47 @@ void lower_call(CXCursor cursor, BodyContext& context)
         if (argumentCount != 1) fail_at(cursor, "digitalRead expects one argument");
         append_hal_call(program, HalService::DigitalRead, byteArgument(0, "pin"), 0);
         peripherals.emplace_back("GPIO");
+        return;
+    }
+    if (name == "attachInterrupt") {
+        if (argumentCount != 3)
+            fail_at(cursor, "attachInterrupt expects pin, handler and mode arguments");
+        const auto pin = byteArgument(0, "interrupt pin");
+        const auto mode = constant_integer(argument(2));
+        if (mode < 0 || mode > 2)
+            fail_at(argument(2), "interrupt mode must be CHANGE(0), RISING(1) or FALLING(2)");
+
+        const auto handlerArgument = argument(1);
+        const auto handlerReference = unwrap_function_reference(handlerArgument);
+        if (clang_Cursor_isNull(handlerReference))
+            fail_at(handlerArgument, "interrupt handler must be a named void() function");
+        const auto handlerDeclaration = clang_getCursorReferenced(handlerReference);
+        const auto handler = find_function_definition(handlerDeclaration, *context.compiler);
+        if (clang_Cursor_isNull(handler))
+            fail_at(handlerArgument, "interrupt handler must be defined in this source");
+        if (clang_Cursor_getNumArguments(handler) != 0 ||
+            ClangString(clang_getTypeSpelling(clang_getCursorResultType(handler))).str() != "void")
+            fail_at(handlerArgument, "interrupt handler must have signature void handler()");
+
+        const auto edgeMask = mode == 0 ? 3 : static_cast<Byte>(mode);
+        const auto instruction = program.instructions.size();
+        program.instructions.push_back({Opcode::AttachIrq,
+            Bytes{pin, static_cast<Byte>(edgeMask), 0, 0, 0, 0}});
+        context.compiler->interruptBindings.push_back({instruction, handler});
+        if (std::find_if(context.compiler->interruptHandlers.begin(),
+                context.compiler->interruptHandlers.end(),
+                [&](const auto candidate) { return clang_equalCursors(candidate, handler); }) ==
+            context.compiler->interruptHandlers.end())
+            context.compiler->interruptHandlers.push_back(handler);
+        program.instructions.push_back({Opcode::EnableIrq, {}});
+        peripherals.emplace_back("IRQ");
+        return;
+    }
+    if (name == "detachInterrupt") {
+        if (argumentCount != 1)
+            fail_at(cursor, "detachInterrupt expects one pin argument");
+        program.instructions.push_back({Opcode::DetachIrq, {byteArgument(0, "interrupt pin")} });
+        peripherals.emplace_back("IRQ");
         return;
     }
     if (name == "millis") {
@@ -861,7 +925,8 @@ CXChildVisitResult lower_statement(CXCursor cursor, CXCursor, CXClientData clien
                 context.program->instructions.push_back({Opcode::Return, {}});
             } else {
                 if (!children.cursors.empty()) fail_at(cursor, "void function cannot return a value");
-                context.program->instructions.push_back({Opcode::Return, {}});
+                context.program->instructions.push_back({
+                    context.isInterruptHandler ? Opcode::ReturnIrq : Opcode::Return, {}});
             }
             context.terminated = true;
             return CXChildVisit_Continue;
@@ -1080,7 +1145,9 @@ FirmwarePackage compile_source(const std::filesystem::path& sourcePath)
             const auto body = function_body(function);
             BodyContext bodyContext{
                 &package.bytecode, &peripherals, &compiler, function, entry, isMain,
-                resultType == "int", !isMain};
+                resultType == "int", !isMain,
+                std::any_of(compiler.interruptHandlers.begin(), compiler.interruptHandlers.end(),
+                    [&](const auto handler) { return clang_equalCursors(handler, function); })};
             if (!isMain) {
                 bodyContext.locals = layout->locals;
                 bodyContext.nextSlot = static_cast<std::uint16_t>(layout->locals.size());
@@ -1103,7 +1170,8 @@ FirmwarePackage compile_source(const std::filesystem::path& sourcePath)
             if (bodyContext.failure) std::rethrow_exception(bodyContext.failure);
             if (!bodyContext.terminated) {
                 if (isMain) package.bytecode.instructions.push_back({Opcode::Halt, {}});
-                else if (resultType == "void") package.bytecode.instructions.push_back({Opcode::Return, {}});
+                else if (resultType == "void") package.bytecode.instructions.push_back({
+                    bodyContext.isInterruptHandler ? Opcode::ReturnIrq : Opcode::Return, {}});
                 else fail_at(function, "int function must return a value on every path");
             }
         }
@@ -1124,6 +1192,23 @@ FirmwarePackage compile_source(const std::filesystem::path& sourcePath)
                 [&](const auto& entry) { return clang_equalCursors(entry.first, pending.target); });
             if (!callerFound || !targetFound)
                 throw FirmwareError("internal compiler error: unresolved function call");
+        }
+
+        for (const auto& pending : compiler.interruptBindings) {
+            bool patched = false;
+            for (const auto& entry : compiler.functionEntries) {
+                if (clang_equalCursors(entry.first, pending.target)) {
+                    auto& instruction = package.bytecode.instructions.at(pending.instruction);
+                    instruction.operands[2] = static_cast<Byte>(entry.second);
+                    instruction.operands[3] = static_cast<Byte>(entry.second >> 8);
+                    instruction.operands[4] = static_cast<Byte>(entry.second >> 16);
+                    instruction.operands[5] = static_cast<Byte>(entry.second >> 24);
+                    patched = true;
+                    break;
+                }
+            }
+            if (!patched)
+                throw FirmwareError("internal compiler error: unresolved interrupt handler");
         }
 
         Bytes symbols;

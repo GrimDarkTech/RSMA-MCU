@@ -120,6 +120,12 @@ Source-level `millis()` использует тот же simulated clock: выз
 строить deterministic elapsed-time control logic без зависимости от Unity frame
 timing.
 
+Source-level IRQ API использует deterministic GPIO edge queue:
+`attachInterrupt(pin, handler, CHANGE|RISING|FALLING)` регистрирует `void()` ISR,
+а `detachInterrupt(pin)` удаляет только binding указанного pin. ISR возвращается
+через `RETURN_IRQ`, восстанавливая interrupted VM state/wake time. Повторный edge
+после detach не dispatch-ится; edge mask `CHANGE` соответствует rising|falling.
+
 ## 6. Целевой контракт sensor/control platform
 
 Для полноценной разработки прикладной системы HAL должен описывать не только

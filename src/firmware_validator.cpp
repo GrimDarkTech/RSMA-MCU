@@ -35,6 +35,7 @@ bool is_known_opcode(Opcode opcode)
     case Opcode::GlobalLoad:
     case Opcode::GlobalStore:
     case Opcode::Yield:
+    case Opcode::DetachIrq:
         return true;
     }
     return false;
@@ -100,6 +101,10 @@ ValidationResult validate_firmware(const FirmwarePackage& package)
             if (!instruction.operands.empty()) {
                 return ValidationResult::failure("IRQ control instruction has operands");
             }
+        }
+        if (instruction.opcode == Opcode::DetachIrq) {
+            if (instruction.operands.size() != 1)
+                return ValidationResult::failure("DETACH_IRQ must have one pin operand");
         }
         if (instruction.opcode == Opcode::ConstI32 && instruction.operands.size() != 4) {
             return ValidationResult::failure("CONST_I32 must have four operand bytes");

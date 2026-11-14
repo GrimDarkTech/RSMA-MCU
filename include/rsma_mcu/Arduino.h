@@ -4,6 +4,9 @@
 #define OUTPUT 1
 #define LOW 0
 #define HIGH 1
+#define CHANGE 0
+#define RISING 1
+#define FALLING 2
 
 extern "C" {
 
@@ -26,6 +29,8 @@ void eepromWrite(int address, int value);
 unsigned long millis();
 void delay(unsigned int milliseconds);
 void yield();
+void attachInterrupt(int pin, void (*handler)(), int mode);
+void detachInterrupt(int pin);
 
 #define DMA_INVALID (-1)
 #define DMA_QUEUE_FULL (-2)

@@ -329,6 +329,12 @@ Millis`, deterministic VM implementation, generated `.rsfw`, Unity PlayMode
 acceptance и negative argument test покрыты. `micros()` и unsigned overflow
 semantics остаются отдельным следующим расширением.
 
+Source-level `attachInterrupt()`/`detachInterrupt()` также завершён для
+`void handler()` ISR: compile-time pin/mode validation, function-entry patching,
+`ATTACH_IRQ`/`ENABLE_IRQ`/`DETACH_IRQ` lowering, deterministic `RETURN_IRQ`,
+generated firmware, negative builder cases и Unity edge/detach acceptance
+покрыты. Общие function pointers и `micros()` остаются вне текущего scope.
+
 Benchmark baseline для virtual VM зафиксирован локальным Unity EditMode
 прогоном `VirtualMcuPerformanceTests` на Unity `6000.3.16f1`, Windows Editor,
 Mono, Ryzen 5 3600. Workload использует 8192 операций и 12 измерений после

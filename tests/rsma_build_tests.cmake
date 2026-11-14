@@ -133,6 +133,32 @@ foreach(required_text "HAL_CALL" "WAIT" "HALT" "Peripherals: GPIO SYSTICK")
     endif()
 endforeach()
 
+set(interrupt_output "${OUTPUT_DIR}/source-interrupt.rsfw")
+execute_process(
+    COMMAND "${RSMA_BUILD}" "${SOURCE_DIR}/source_interrupt.cpp" -o "${interrupt_output}"
+    RESULT_VARIABLE interrupt_result
+    OUTPUT_VARIABLE interrupt_stdout
+    ERROR_VARIABLE interrupt_stderr
+)
+if(NOT interrupt_result EQUAL 0)
+    message(FATAL_ERROR "rsma-build rejected source interrupt fixture:\n${interrupt_stdout}\n${interrupt_stderr}")
+endif()
+execute_process(
+    COMMAND "${RSMA_INSPECT}" "${interrupt_output}"
+    RESULT_VARIABLE interrupt_inspect_result
+    OUTPUT_VARIABLE interrupt_inspect_stdout
+    ERROR_VARIABLE interrupt_inspect_stderr
+)
+if(NOT interrupt_inspect_result EQUAL 0)
+    message(FATAL_ERROR "source interrupt firmware is invalid:\n${interrupt_inspect_stderr}")
+endif()
+foreach(required_text "ATTACH_IRQ" "DETACH_IRQ" "ENABLE_IRQ" "RETURN_IRQ" "Peripherals: GPIO IRQ")
+    string(FIND "${interrupt_inspect_stdout}" "${required_text}" interrupt_text_index)
+    if(interrupt_text_index EQUAL -1)
+        message(FATAL_ERROR "source interrupt firmware is missing '${required_text}':\n${interrupt_inspect_stdout}")
+    endif()
+endforeach()
+
 set(analog_threshold_output "${OUTPUT_DIR}/analog-threshold-pwm.rsfw")
 execute_process(
     COMMAND "${RSMA_BUILD}" "${SOURCE_DIR}/analog_threshold_pwm.cpp" -o "${analog_threshold_output}"
@@ -413,6 +439,27 @@ foreach(fixture_and_message IN ITEMS
     )
     if(rejected_result EQUAL 0 OR EXISTS "${rejected_output}")
         message(FATAL_ERROR "rsma-build accepted unsupported global fixture ${fixture_name}")
+    endif()
+    if(NOT "${rejected_stderr}" MATCHES "${expected_message}")
+        message(FATAL_ERROR "${fixture_name} received the wrong diagnostic:\n${rejected_stderr}")
+    endif()
+endforeach()
+
+foreach(fixture_and_message IN ITEMS
+        "source_interrupt_invalid_mode.cpp|interrupt mode must be CHANGE"
+        "source_interrupt_invalid_handler.cpp|no matching function for call to 'attachInterrupt'")
+    string(REPLACE "|" ";" fixture_fields "${fixture_and_message}")
+    list(GET fixture_fields 0 fixture_name)
+    list(GET fixture_fields 1 expected_message)
+    set(rejected_output "${OUTPUT_DIR}/${fixture_name}.rsfw")
+    execute_process(
+        COMMAND "${RSMA_BUILD}" "${SOURCE_DIR}/${fixture_name}" -o "${rejected_output}"
+        RESULT_VARIABLE rejected_result
+        OUTPUT_VARIABLE rejected_stdout
+        ERROR_VARIABLE rejected_stderr
+    )
+    if(rejected_result EQUAL 0 OR EXISTS "${rejected_output}")
+        message(FATAL_ERROR "rsma-build accepted invalid source interrupt fixture ${fixture_name}")
     endif()
     if(NOT "${rejected_stderr}" MATCHES "${expected_message}")
         message(FATAL_ERROR "${fixture_name} received the wrong diagnostic:\n${rejected_stderr}")

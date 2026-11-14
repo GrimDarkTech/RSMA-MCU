@@ -41,6 +41,11 @@ runtime возвращает текущее deterministic simulated time в ми
 Значение доступно как `int` expression в текущем frontend/VM integer model;
 переполнение за пределами signed VM range пока не моделируется как отдельный
 unsigned arithmetic contract.
+`attachInterrupt(pin, handler, mode)` принимает compile-time pin и mode
+`CHANGE`, `RISING` или `FALLING`; `handler` должен быть определённой в source
+функцией `void handler()` и понижается в `ATTACH_IRQ`/`ENABLE_IRQ`.
+`detachInterrupt(pin)` понижает в `DETACH_IRQ` и удаляет binding только этого pin.
+Общая семантика function pointers не поддерживается.
 `spiTransfer(bus, value)` и `i2cTransfer(address, value)` принимают route/address
 как compile-time integer и TX byte как runtime expression; они понижаются в
 stack-based `HAL_CALL`, возвращая RX byte как `int`. SPI bus ограничен `0..255`,
