@@ -73,7 +73,112 @@ HAL_GetTick();
 
 Значения частоты и задержки должны иметь фиксированные единицы и явно документированную точность. Сетевой backend не должен передавать каждую VM-инструкцию; границей обмена являются периферийные события.
 
-## 5. Ошибки
+## 5. ADC и виртуальный аналоговый датчик
+
+Текущий firmware API предоставляет чтение raw ADC sample:
+
+```cpp
+int sample = analogRead(channel); // 0..4095
+```
+
+Следующий Emulator increment — `VirtualAnalogSensor`, подключённый к ADC
+channel через backend. Sensor model должен отделять физический сигнал от
+firmware ADC-контракта и задавать:
+
+- `waveform`: constant, ramp, sine или пользовательская кривая;
+- deterministic `noise` с seed и амплитудой;
+- `sampling` period/frequency и момент обновления sample;
+- `calibration`: raw range, offset, gain и clamping;
+- physical `units` для инспектора и telemetry.
+
+Сигнал вычисляется по simulated time и становится доступен прошивке только
+через `analogRead(channel)`. Sensor не вызывает VM напрямую. Один channel
+должен иметь однозначное подключение; отсутствующий sensor, invalid mapping и
+некорректный ADC range должны диагностироваться до запуска firmware. Raw
+значение после calibration ограничивается диапазоном `0..4095`, а units не
+влияют на значение, видимое firmware.
+
+Контракт считается готовым после end-to-end теста `VirtualAnalogSensor ->
+analogRead -> threshold -> GPIO/PWM output` с проверкой waveform, noise seed,
+sampling, calibration и disconnected-sensor error в Unity EditMode/PlayMode.
+
+## 6. Целевой контракт sensor/control platform
+
+Для полноценной разработки прикладной системы HAL должен описывать не только
+отдельные функции, но и сквозную границу `firmware -> VM -> board profile ->
+Emulator backend -> scene peripheral`. Один и тот же `.rsfw` должен иметь
+одинаковые semantics в standalone fixture и Unity scene.
+
+### GPIO и board capabilities
+
+Board profile обязан предоставлять для каждого pin mapping и capabilities:
+
+- digital input/output;
+- pull-up/pull-down;
+- push-pull/open-drain и high-impedance release;
+- ADC channel;
+- PWM timer/channel;
+- external IRQ edge;
+- alternate-function/bus assignment.
+
+Конфликт pin, duplicate physical mapping, unsupported mode и отсутствующий
+board capability должны отклоняться до первого VM tick. Reset и safe-state
+должны быть определены отдельно для latch, effective line, sensor input и
+actuator output.
+
+### Source API gaps
+
+Следующий source-level increment должен синхронно добавить в `Arduino.h`,
+builder, validator, bytecode и runtime:
+
+```cpp
+analogWrite(pin, duty);
+attachInterrupt(pin, handler, edge);
+detachInterrupt(pin);
+millis();
+micros();
+serialBegin(port, baud);
+serialAvailable(port);
+serialRead(port);
+serialWrite(port, value);
+```
+
+Текущие runtime/bytecode возможности PWM, IRQ и UART не считаются готовым
+прикладным API, пока их нельзя использовать из пользовательского C++ source.
+
+### Device buses
+
+`spiTransfer(bus, value)` и `i2cTransfer(address, value)` остаются минимальным
+byte-level compatibility layer. Для sensor drivers потребуются transaction-level
+API и virtual devices:
+
+- I2C register address, multi-byte read/write, ACK/NACK, device presence,
+  repeated START, bus speed и timeout;
+- SPI device/chip-select, transaction boundary, CPOL/CPHA, bit order, speed и
+  full-duplex buffer;
+- register-map device model, reset state, configurable response и fault
+  injection;
+- единый device/bus mapping в board profile и Unity scene.
+
+### Errors, timing и lifecycle
+
+Каждый peripheral contract должен определить units, simulated-time behavior,
+reset/cancel semantics, queue/FIFO limits, timeout, retryability и safe-state.
+Ошибки должны быть диагностируемыми для неизвестного pin/device, disconnected
+sensor, NACK, bus timeout, FIFO overflow, DMA queue full, stalled transfer,
+conflicting output и VM fault. Бесконечный polling без timeout/error result не
+является допустимым прикладным контрактом.
+
+### Приёмочный вертикальный срез
+
+Минимальная приемка платформы — source firmware, собранная `rsma-build`, которая
+читает `VirtualAnalogSensor`, применяет threshold/filter, управляет GPIO или
+PWM actuator и отправляет UART telemetry. Следующие срезы должны покрыть
+button/encoder IRQ и хотя бы один register-level I2C/SPI device. Для каждого
+среза обязательны generated `.rsfw`, Unity scene, EditMode/PlayMode test,
+expected event trace и negative/error cases.
+
+## 7. Ошибки
 
 HAL должен возвращать диагностируемый статус для:
 
