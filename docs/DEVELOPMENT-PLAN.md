@@ -102,6 +102,26 @@ completion по simulated time; C++ facade предоставляет submit/sta
 profile-aware validation и Unity mappings для `RSMA-STM32F103` и
 `RSMA-AVR-ATmega328P`; AVR profile намеренно не поддерживает DMA.
 
+Benchmark baseline для virtual VM зафиксирован локальным Unity EditMode
+прогоном `VirtualMcuPerformanceTests` на Unity `6000.3.16f1`, Windows Editor,
+Mono, Ryzen 5 3600. Workload использует 8192 операций и 12 измерений после
+5 warmup measurements; baseline следует читать как reference для сравнений,
+а не как жёсткий CI threshold. В одном чистом прогоне `Advance` дал median
+1149.0 us без profiler и 1346.3 us с profiler для compute workload, а для
+8192 HAL dispatch — 644.55 us и 520.50 us соответственно. Counters проверены
+assertions: compute — 16385 instructions и 0 HAL calls, HAL dispatch — 8193
+instructions и 8192 HAL calls; peak value/call/interrupt stack depths также
+сохраняются в performance output. Повторный прогон должен выполняться на той
+же машине и с теми же workload parameters, поскольку Unity Editor timing
+имеет заметный host noise.
+
+Async DMA contract: queue capacity включает все unreleased tickets, включая
+`DMA_COMPLETE`; слот освобождается только `dmaRelease`. `ResetDma` является
+явной cancellation/reset операцией и инвалидирует active, queued и complete
+tickets, одновременно очищая staging buffers. Отдельный transfer timeout и
+ошибка устройства пока не моделируются: completion определяется только
+simulated time, а invalid arguments/backend absence приводят к VM fault.
+
 ## Что не входит в первый релиз
 
 - Полная эмуляция ARM/AVR instruction set.
