@@ -7,8 +7,8 @@ void onPacket()
     if (Serial1.packetType() == 5) {
         if (Serial1.packetAvailable() != 0) {
             Serial1.write(Serial1.packetRead());
-            packetDone = true;
         }
+        packetDone = true;
     }
 }
 

@@ -365,7 +365,9 @@ Source-level packet callbacks теперь добавлены для builtin UAR
 `attachPacketReceive(void handler())`/`detachPacketReceive()` используют
 `ATTACH_UART_PACKET_RX`/`DETACH_UART_PACKET_RX`, а payload доступен через
 `packetAvailable()`/`packetRead()` и `packetType()`. Только CRC-valid complete
-frames создают callback; bounded packet queue и non-reentrant dispatch покрыты
+builder fixture и PlayMode acceptance. Дополнительно покрыты fragmented frame,
+concatenated FIFO packets, zero-length payload, atomic queue overflow,
+malformed callback declarations, reset/re-dispatch и reader HAL operand checks.
 builder fixture и PlayMode acceptance. Более богатые payload ownership/array
 semantics остаются отдельным будущим расширением.
 

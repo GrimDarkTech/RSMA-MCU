@@ -531,7 +531,8 @@ foreach(fixture_and_message IN ITEMS
         "unsupported_global_type.cpp|global variables currently support only int and bool"
         "unsupported_global_initializer.cpp|expected a compile-time integer constant"
         "millis_argument.cpp|no matching function for call to 'millis'"
-        "serial_custom_object.cpp|call target 'begin' has no definition in this source")
+        "serial_custom_object.cpp|call target 'begin' has no definition in this source"
+        "serial_packet_custom_object.cpp|call target 'packetType' has no definition in this source")
     string(REPLACE "|" ";" fixture_fields "${fixture_and_message}")
     list(GET fixture_fields 0 fixture_name)
     list(GET fixture_fields 1 expected_message)
@@ -544,6 +545,27 @@ foreach(fixture_and_message IN ITEMS
     )
     if(rejected_result EQUAL 0 OR EXISTS "${rejected_output}")
         message(FATAL_ERROR "rsma-build accepted unsupported global fixture ${fixture_name}")
+    endif()
+    if(NOT "${rejected_stderr}" MATCHES "${expected_message}")
+        message(FATAL_ERROR "${fixture_name} received the wrong diagnostic:\n${rejected_stderr}")
+    endif()
+endforeach()
+
+foreach(fixture_and_message IN ITEMS
+        "serial_packet_invalid_arguments.cpp|too many arguments to function call"
+        "serial_packet_invalid_handler.cpp|different number of parameters")
+    string(REPLACE "|" ";" fixture_fields "${fixture_and_message}")
+    list(GET fixture_fields 0 fixture_name)
+    list(GET fixture_fields 1 expected_message)
+    set(rejected_output "${OUTPUT_DIR}/${fixture_name}.rsfw")
+    execute_process(
+        COMMAND "${RSMA_BUILD}" "${SOURCE_DIR}/${fixture_name}" -o "${rejected_output}"
+        RESULT_VARIABLE rejected_result
+        OUTPUT_VARIABLE rejected_stdout
+        ERROR_VARIABLE rejected_stderr
+    )
+    if(rejected_result EQUAL 0 OR EXISTS "${rejected_output}")
+        message(FATAL_ERROR "rsma-build accepted invalid UART packet fixture ${fixture_name}")
     endif()
     if(NOT "${rejected_stderr}" MATCHES "${expected_message}")
         message(FATAL_ERROR "${fixture_name} received the wrong diagnostic:\n${rejected_stderr}")
