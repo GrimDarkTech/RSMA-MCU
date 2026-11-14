@@ -46,6 +46,7 @@ if(RSMA_MCU_BUILD_TOOLS)
     add_executable(rsma-uart-echo examples/uart_echo.cpp)
     target_link_libraries(rsma-uart-echo PRIVATE rsma_mcu_core)
 
+
     if(MSVC)
         target_compile_options(rsma-mcu-info PRIVATE /W4 /permissive-)
         target_compile_options(rsma-firmware-inspect PRIVATE /W4 /permissive-)

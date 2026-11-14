@@ -66,6 +66,7 @@ enum class HalService : std::uint16_t
     DmaStatus = 21,
     DmaReadByte = 22,
     DmaRelease = 23,
+    AnalogWrite = 24,
 };
 
 constexpr std::string_view opcode_name(Opcode opcode)

@@ -107,6 +107,32 @@ foreach(required_text "HAL_CALL" "HALT" "Peripherals: ADC")
     endif()
 endforeach()
 
+set(analog_threshold_output "${OUTPUT_DIR}/analog-threshold-pwm.rsfw")
+execute_process(
+    COMMAND "${RSMA_BUILD}" "${SOURCE_DIR}/analog_threshold_pwm.cpp" -o "${analog_threshold_output}"
+    RESULT_VARIABLE analog_threshold_result
+    OUTPUT_VARIABLE analog_threshold_stdout
+    ERROR_VARIABLE analog_threshold_stderr
+)
+if(NOT analog_threshold_result EQUAL 0)
+    message(FATAL_ERROR "rsma-build rejected analog threshold/PWM fixture:\n${analog_threshold_stdout}\n${analog_threshold_stderr}")
+endif()
+execute_process(
+    COMMAND "${RSMA_INSPECT}" "${analog_threshold_output}"
+    RESULT_VARIABLE analog_threshold_inspect_result
+    OUTPUT_VARIABLE analog_threshold_inspect_stdout
+    ERROR_VARIABLE analog_threshold_inspect_stderr
+)
+if(NOT analog_threshold_inspect_result EQUAL 0)
+    message(FATAL_ERROR "analog threshold/PWM firmware is invalid:\n${analog_threshold_inspect_stderr}")
+endif()
+foreach(required_text "Instructions:" "HAL_CALL" "CMP_GE_I32" "JUMP_IF" "WAIT" "Peripherals: GPIO ADC PWM SYSTICK")
+    string(FIND "${analog_threshold_inspect_stdout}" "${required_text}" analog_threshold_text_index)
+    if(analog_threshold_text_index EQUAL -1)
+        message(FATAL_ERROR "analog threshold/PWM firmware is missing '${required_text}':\n${analog_threshold_inspect_stdout}")
+    endif()
+endforeach()
+
 set(bus_output "${OUTPUT_DIR}/bus-transfers.rsfw")
 execute_process(
     COMMAND "${RSMA_BUILD}" "${SOURCE_DIR}/bus_transfers.cpp" -o "${bus_output}"

@@ -146,7 +146,7 @@ serialRead(port);
 serialWrite(port, value);
 ```
 
-Текущие runtime/bytecode возможности PWM, IRQ и UART не считаются готовым
+Текущие runtime/bytecode возможности IRQ и UART не считаются готовым
 прикладным API, пока их нельзя использовать из пользовательского C++ source.
 
 ### Device buses

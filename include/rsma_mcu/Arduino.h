@@ -11,6 +11,7 @@ void pinMode(int pin, int mode);
 void digitalWrite(int pin, int value);
 int digitalRead(int pin);
 int analogRead(int channel);
+void analogWrite(int pin, int duty);
 int spiTransfer(int bus, int value);
 int i2cTransfer(int address, int value);
 int dmaTransfer(int channel, int value);

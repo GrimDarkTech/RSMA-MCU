@@ -72,9 +72,11 @@ HAL backend, поэтому сохраняется между `VirtualMachine.Re
 отдельное persistent VM storage (`GLOBAL_LOAD`/`GLOBAL_STORE`) и compile-time
 инициализацию при старте `main()`; storage сохраняется между вызовами функций и
 очищается при `Reset()`.
-Аргументы pin/mode/delay HAL должны оставаться compile-time константами. `do-while`,
+Аргументы pin/mode/delay HAL должны оставаться compile-time константами. `analogWrite(pin, duty)`
+принимает compile-time pin и runtime/compile-time duty в диапазоне `0..255` и
+понижается в динамический PWM HAL call. `do-while`,
 типы функций, локальных и глобальных переменных, отличные от `int`/`bool`, динамические
-глобальные initializer-ы, PWM и UART пока отклоняются с
+глобальные initializer-ы и UART пока отклоняются с
 диагностикой; неполная прошивка не создаётся.
 
 Для сборки target `rsma-build` включается опцией

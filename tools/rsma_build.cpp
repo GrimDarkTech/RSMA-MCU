@@ -553,7 +553,8 @@ void lower_call(CXCursor cursor, BodyContext& context)
     const auto function = resolve_called_function(cursor);
     const auto& name = function.name;
     const bool halName = name == "pinMode" || name == "digitalWrite" ||
-        name == "digitalRead" || name == "analogRead" || name == "spiTransfer" ||
+        name == "digitalRead" || name == "analogRead" || name == "analogWrite" ||
+        name == "spiTransfer" ||
         name == "i2cTransfer" || name == "dmaTransfer" || name == "eepromRead" ||
         name == "eepromWrite" || name == "dmaBufferWrite" || name == "dmaBufferRead" ||
         name == "dmaSubmit" || name == "dmaStatus" || name == "dmaReadByte" ||
@@ -692,6 +693,27 @@ void lower_call(CXCursor cursor, BodyContext& context)
         if (argumentCount != 1) fail_at(cursor, "analogRead expects one argument");
         append_hal_call(program, HalService::AnalogRead, byteArgument(0, "ADC channel"), 0);
         peripherals.emplace_back("ADC");
+        return;
+    }
+    if (name == "analogWrite") {
+        if (argumentCount != 2) fail_at(cursor, "analogWrite expects pin and duty arguments");
+        const auto pin = byteArgument(0, "PWM pin");
+        bool hasConstantDuty = true;
+        std::int64_t duty = 0;
+        try {
+            duty = constant_integer(argument(1));
+        } catch (const FirmwareError&) {
+            hasConstantDuty = false;
+        }
+        if (hasConstantDuty) {
+            if (duty < 0 || duty > std::numeric_limits<Byte>::max())
+                fail_at(argument(1), "PWM duty must be between 0 and 255");
+            append_hal_call(program, HalService::PwmWrite, pin, static_cast<Byte>(duty));
+        } else {
+            emit_expression(argument(1), context);
+            append_hal_call(program, HalService::AnalogWrite, pin, 0);
+        }
+        peripherals.emplace_back("PWM");
         return;
     }
     if (name == "dmaBufferWrite") {
