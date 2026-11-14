@@ -106,6 +106,14 @@ hold, deterministic noise seed, calibration, duplicate channel и
 analogWrite -> RSMAGPIO PWM output`, а unmapped ADC channel завершается
 диагностируемой ошибкой до запуска sensor.
 
+Для observability VM предоставляет bounded `VirtualTraceBuffer` и события
+`TimeAdvanced`, `AnalogSample`, `DigitalOutput`, `PwmOutput`, `HalCall`,
+`StateTransition`, `Interrupt`, `UartTransmit`, `RejectedMapping` и `Fault`.
+Каждое событие содержит monotonic sequence,
+simulated timestamp, channel/value и optional message. Trace доступен одинаково
+из standalone `VirtualMachine` и Unity `RSMAVirtualMicrocontroller`; переполнение
+буфера отбрасывает старые события и увеличивает `DroppedEventCount`.
+
 ## 6. Целевой контракт sensor/control platform
 
 Для полноценной разработки прикладной системы HAL должен описывать не только

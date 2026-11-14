@@ -292,8 +292,9 @@ test и безопасное поведение actuator outputs.
 Добавить реальные прикладные вертикальные срезы:
 
 1. `VirtualAnalogSensor -> ADC -> threshold -> digital relay/LED` — базовый
-   source-built ADC/PWM slice уже реализован; следующий шаг — trace/telemetry
-   instrumentation и полноценная serialized Unity scene fixture.
+   source-built ADC/PWM slice уже реализован; bounded trace для VM time, ADC
+   sample, PWM output и faults уже доступен; следующий шаг — telemetry transport
+   и trace export в CI.
 2. `Button/encoder -> IRQ -> debounced state machine -> PWM actuator`.
 3. `I2C temperature sensor -> calibration/filter -> fan PWM -> UART telemetry`.
 4. `SPI encoder -> position control -> motor driver -> fault input`.
