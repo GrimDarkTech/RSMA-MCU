@@ -54,3 +54,19 @@ assert both encoding to and decoding from this vector.
 `HitlFrameCodec` in the RSMA Unity project and `hitl_protocol.h` in `rsma-mcu`
 implement the common envelope. The portable C++ codec is not itself an STM32
 UART driver; board firmware must provide byte I/O and the independent watchdog.
+
+## Streaming decoder contract
+
+`HitlFrameParser` (Unity/C#) and `HitlFrameStreamDecoder` (portable C++) accept
+arbitrary byte chunks. They retain incomplete headers/frames, dispatch complete
+valid frames in wire order, and resynchronize on the next `RSMH` after noise or
+a rejected candidate. CRC, version, message type and length failures do not
+terminate the stream: the candidate is rejected, `FrameRejected`/rejection
+state is updated, and parsing continues. The decoder retains at most one
+maximum-size v1 frame plus the three-byte magic prefix, preventing unbounded
+memory growth from a malformed or disconnected transport.
+
+This transport parser is deliberately below the source-language UART API. It
+does not turn individual frame bytes into VM instructions and does not imply a
+source-level byte-array type. A future packet callback API must define payload
+buffer ownership and maximum packet size before it is added to `Arduino.h`.

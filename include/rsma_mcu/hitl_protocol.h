@@ -31,9 +31,25 @@ constexpr std::uint8_t kHitlProtocolVersion = 1;
 constexpr std::size_t kHitlHeaderSize = 22;
 constexpr std::size_t kHitlChecksumSize = 4;
 constexpr std::size_t kHitlMaxPayloadSize = 0xFFFF;
+constexpr std::size_t kHitlMaxFrameSize = kHitlHeaderSize + kHitlMaxPayloadSize + kHitlChecksumSize;
 
 std::uint32_t hitl_crc32(std::span<const std::uint8_t> bytes);
 std::vector<std::uint8_t> encode_hitl_frame(const HitlFrame& frame);
 bool decode_hitl_frame(std::span<const std::uint8_t> bytes, HitlFrame& frame, std::string& error);
+
+class HitlFrameStreamDecoder
+{
+public:
+    std::vector<HitlFrame> feed(std::span<const std::uint8_t> bytes);
+    void reset();
+
+    const std::string& lastError() const { return lastError_; }
+    std::size_t rejectedFrameCount() const { return rejectedFrameCount_; }
+
+private:
+    std::vector<std::uint8_t> buffer_;
+    std::string lastError_;
+    std::size_t rejectedFrameCount_ = 0;
+};
 
 } // namespace rsma_mcu

@@ -354,6 +354,42 @@ void test_hitl_codec_matches_shared_golden_vector()
         decoded.payload == frame.payload, "C++ decoder did not recover shared golden vector fields");
 }
 
+void test_hitl_stream_decoder_reassembles_and_recovers()
+{
+    HitlFrame first;
+    first.type = HitlMessageType::Heartbeat;
+    first.sequence = 1;
+    first.timestampMilliseconds = 10;
+    HitlFrame second;
+    second.type = HitlMessageType::Data;
+    second.sequence = 2;
+    second.timestampMilliseconds = 20;
+    second.payload = {9, 8, 7};
+
+    const auto firstBytes = encode_hitl_frame(first);
+    const auto secondBytes = encode_hitl_frame(second);
+    auto corrupted = firstBytes;
+    corrupted.back() ^= 0x01;
+
+    HitlFrameStreamDecoder decoder;
+    auto frames = decoder.feed(std::span<const Byte>(corrupted).first(7));
+    require(frames.empty(), "fragmented invalid HITL frame should not dispatch early");
+    frames = decoder.feed(std::span<const Byte>(corrupted).subspan(7));
+    require(frames.empty(), "invalid HITL frame should not dispatch");
+    frames = decoder.feed(secondBytes);
+    require(frames.size() == 1, "stream decoder did not recover after invalid frame");
+    require(frames.front().sequence == second.sequence && frames.front().payload == second.payload,
+        "stream decoder recovered the wrong frame");
+    require(decoder.rejectedFrameCount() == 1, "stream decoder did not count rejected frame");
+    require(decoder.lastError() == "HITL frame CRC mismatch",
+        "stream decoder reported an unexpected rejection reason");
+
+    decoder.reset();
+    frames = decoder.feed(secondBytes);
+    require(frames.size() == 1 && decoder.rejectedFrameCount() == 0,
+        "stream decoder reset did not clear rejection state");
+}
+
 } // namespace
 
 int main(int argc, char** argv)
@@ -366,6 +402,7 @@ int main(int argc, char** argv)
         test_board_profiles();
         test_hitl_frame_round_trip_and_crc();
         test_hitl_codec_matches_shared_golden_vector();
+        test_hitl_stream_decoder_reassembles_and_recovers();
         std::cout << "All RSFW tests passed\n";
         return 0;
     } catch (const std::exception& error) {

@@ -132,4 +132,52 @@ bool decode_hitl_frame(std::span<const std::uint8_t> bytes, HitlFrame& frame, st
     return true;
 }
 
+std::vector<HitlFrame> HitlFrameStreamDecoder::feed(std::span<const std::uint8_t> bytes)
+{
+    buffer_.insert(buffer_.end(), bytes.begin(), bytes.end());
+    std::vector<HitlFrame> frames;
+
+    while (true) {
+        const auto magic = std::search(buffer_.begin(), buffer_.end(), kMagic.begin(), kMagic.end());
+        if (magic == buffer_.end()) {
+            const auto keep = std::min<std::size_t>(buffer_.size(), kMagic.size() - 1);
+            if (buffer_.size() > keep)
+                buffer_.erase(buffer_.begin(), buffer_.end() - static_cast<std::ptrdiff_t>(keep));
+            break;
+        }
+        if (magic != buffer_.begin())
+            buffer_.erase(buffer_.begin(), magic);
+        if (buffer_.size() < kHitlHeaderSize)
+            break;
+
+        const auto payloadSize = read_u16(buffer_, 20);
+        const auto frameSize = kHitlHeaderSize + payloadSize + kHitlChecksumSize;
+        if (buffer_.size() < frameSize)
+            break;
+
+        HitlFrame frame;
+        std::string error;
+        if (decode_hitl_frame(std::span<const std::uint8_t>(buffer_).first(frameSize), frame, error)) {
+            frames.push_back(std::move(frame));
+            buffer_.erase(buffer_.begin(), buffer_.begin() + static_cast<std::ptrdiff_t>(frameSize));
+            continue;
+        }
+
+        lastError_ = std::move(error);
+        ++rejectedFrameCount_;
+        buffer_.erase(buffer_.begin());
+    }
+
+    if (buffer_.size() > kHitlMaxFrameSize)
+        buffer_.erase(buffer_.begin(), buffer_.end() - static_cast<std::ptrdiff_t>(kHitlMaxFrameSize));
+    return frames;
+}
+
+void HitlFrameStreamDecoder::reset()
+{
+    buffer_.clear();
+    lastError_.clear();
+    rejectedFrameCount_ = 0;
+}
+
 } // namespace rsma_mcu

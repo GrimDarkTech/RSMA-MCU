@@ -352,6 +352,14 @@ callback state и `RETURN_UART_RX`. Generated callback fixture, trace ordering
 `UartReceive -> UartCallback -> UartTransmit` и PlayMode acceptance покрыты.
 Packet framing/HITL integration остаются следующим расширением.
 
+HITL v1 streaming framing increment также добавлен на transport boundary:
+`HitlFrameParser` и `HitlFrameStreamDecoder` принимают fragmented/concatenated
+byte chunks, ограничивают внутренний buffer максимальным v1 frame size,
+отклоняют CRC/version/type/length failures без остановки потока и
+resynchronize-ятся по `RSMH`. Source-level packet callbacks намеренно не
+добавлены: для них сначала требуется определить byte-array/payload ownership
+contract, чтобы не замаскировать transport framing под VM instruction API.
+
 Benchmark baseline для virtual VM зафиксирован локальным Unity EditMode
 прогоном `VirtualMcuPerformanceTests` на Unity `6000.3.16f1`, Windows Editor,
 Mono, Ryzen 5 3600. Workload использует 8192 операций и 12 измерений после
