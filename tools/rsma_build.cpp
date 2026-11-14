@@ -56,7 +56,8 @@ CXChildVisitResult find_main(CXCursor cursor, CXCursor, CXClientData clientData)
             }
         }
         if (clang_getCursorKind(cursor) == CXCursor_VarDecl &&
-            clang_getCursorKind(clang_getCursorLexicalParent(cursor)) == CXCursor_TranslationUnit)
+            clang_getCursorKind(clang_getCursorLexicalParent(cursor)) == CXCursor_TranslationUnit &&
+            ClangString(clang_getTypeSpelling(clang_getCursorType(cursor))).str() != "SerialPort")
             context.globalVariables.push_back(cursor);
     } catch (...) {
         context.failure = std::current_exception();
@@ -184,6 +185,7 @@ struct CompileContext
 
 ResolvedFunction resolve_called_function(CXCursor call);
 bool is_builtin_hal_declaration(CXCursor declaration);
+bool is_serial_member_call(CXCursor cursor, const ResolvedFunction& function);
 std::vector<CXCursor> cursor_children(CXCursor cursor);
 
 CXCursor find_function_definition(CXCursor declaration, CompileContext& compiler)
@@ -328,6 +330,37 @@ void emit_expression(CXCursor cursor, BodyContext& context)
     }
     if (kind == CXCursor_CallExpr) {
         const auto function = resolve_called_function(cursor);
+        if (is_serial_member_call(cursor, function)) {
+            const auto argumentCount = clang_Cursor_getNumArguments(cursor);
+            if (function.name == "available" || function.name == "read") {
+                if (argumentCount != 0)
+                    fail_at(cursor, "Serial.available/read expects no arguments");
+                append_hal_call(*context.program,
+                    function.name == "available" ? HalService::UartAvailable : HalService::UartRead, 0, 0);
+                context.peripherals->emplace_back("UART");
+                return;
+            }
+            if (function.name == "begin") {
+                if (argumentCount != 1)
+                    fail_at(cursor, "Serial.begin expects one baud preset argument");
+                const auto preset = constant_integer(clang_Cursor_getArgument(cursor, 0));
+                if (preset < 0 || preset >= 5)
+                    fail_at(clang_Cursor_getArgument(cursor, 0),
+                        "Serial.begin baud preset must be between 0 and 4");
+                append_hal_call(*context.program, HalService::UartBegin, 0,
+                    static_cast<Byte>(preset));
+                context.peripherals->emplace_back("UART");
+                return;
+            }
+            if (function.name == "write") {
+                if (argumentCount != 1)
+                    fail_at(cursor, "Serial.write expects one value argument");
+                emit_expression(clang_Cursor_getArgument(cursor, 0), context);
+                append_hal_call(*context.program, HalService::UartWrite, 0, 0);
+                context.peripherals->emplace_back("UART");
+                return;
+            }
+        }
         if (function.name == "digitalRead" || function.name == "analogRead" ||
             function.name == "spiTransfer" || function.name == "i2cTransfer" ||
             function.name == "dmaTransfer" || function.name == "eepromRead" ||
@@ -575,12 +608,25 @@ bool is_builtin_hal_declaration(CXCursor declaration)
     return normalized_path(declarationPath) == normalized_path(RSMA_MCU_ARDUINO_HEADER);
 }
 
+bool is_serial_member_call(CXCursor cursor, const ResolvedFunction& function)
+{
+    if (clang_getCursorKind(cursor) != CXCursor_CallExpr ||
+        !is_builtin_hal_declaration(function.declaration))
+        return false;
+    const auto parent = clang_getCursorSemanticParent(function.declaration);
+    if (ClangString(clang_getCursorSpelling(parent)).str() != "SerialPort")
+        return false;
+    return function.name == "begin" || function.name == "available" ||
+        function.name == "read" || function.name == "write";
+}
+
 void lower_call(CXCursor cursor, BodyContext& context)
 {
     auto& program = *context.program;
     auto& peripherals = *context.peripherals;
     const auto function = resolve_called_function(cursor);
     const auto& name = function.name;
+    const bool serialMember = is_serial_member_call(cursor, function);
     const bool halName = name == "pinMode" || name == "digitalWrite" ||
         name == "digitalRead" || name == "analogRead" || name == "analogWrite" ||
         name == "spiTransfer" ||
@@ -588,7 +634,7 @@ void lower_call(CXCursor cursor, BodyContext& context)
         name == "eepromWrite" || name == "dmaBufferWrite" || name == "dmaBufferRead" ||
         name == "dmaSubmit" || name == "dmaStatus" || name == "dmaReadByte" ||
         name == "dmaRelease" || name == "millis" || name == "delay" || name == "yield" ||
-        name == "attachInterrupt" || name == "detachInterrupt";
+        name == "attachInterrupt" || name == "detachInterrupt" || serialMember;
     if (halName && !is_builtin_hal_declaration(function.declaration)) {
         fail_at(cursor, "HAL call must resolve to the declaration in <rsma_mcu/Arduino.h>");
     }
@@ -634,6 +680,35 @@ void lower_call(CXCursor cursor, BodyContext& context)
         }
         return static_cast<Byte>(value);
     };
+
+    if (serialMember) {
+        if (name == "available" || name == "read") {
+            if (argumentCount != 0)
+                fail_at(cursor, "Serial.available/read expects no arguments");
+            append_hal_call(program,
+                name == "available" ? HalService::UartAvailable : HalService::UartRead, 0, 0);
+            peripherals.emplace_back("UART");
+            return;
+        }
+        if (name == "begin") {
+            if (argumentCount != 1)
+                fail_at(cursor, "Serial.begin expects one baud preset argument");
+            const auto preset = constant_integer(argument(0));
+            if (preset < 0 || preset >= 5)
+                fail_at(argument(0), "Serial.begin baud preset must be between 0 and 4");
+            append_hal_call(program, HalService::UartBegin, 0, static_cast<Byte>(preset));
+            peripherals.emplace_back("UART");
+            return;
+        }
+        if (name == "write") {
+            if (argumentCount != 1)
+                fail_at(cursor, "Serial.write expects one value argument");
+            emit_expression(argument(0), context);
+            append_hal_call(program, HalService::UartWrite, 0, 0);
+            peripherals.emplace_back("UART");
+            return;
+        }
+    }
 
     if (name == "pinMode") {
         if (argumentCount != 2) fail_at(cursor, "pinMode expects two arguments");

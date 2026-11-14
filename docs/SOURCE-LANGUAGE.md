@@ -46,6 +46,11 @@ unsigned arithmetic contract.
 функцией `void handler()` и понижается в `ATTACH_IRQ`/`ENABLE_IRQ`.
 `detachInterrupt(pin)` понижает в `DETACH_IRQ` и удаляет binding только этого pin.
 Общая семантика function pointers не поддерживается.
+UART port 0 доступен через builtin facade `Serial`: `Serial.begin(preset)` с
+compile-time preset `0..4`, `Serial.available()`, `Serial.read()` и
+`Serial.write(value)`. Эти методы понижаются в HAL services `UartBegin`,
+`UartAvailable`, `UartRead` и `UartWrite`; произвольные пользовательские
+classes/member calls frontend не поддерживает.
 `spiTransfer(bus, value)` и `i2cTransfer(address, value)` принимают route/address
 как compile-time integer и TX byte как runtime expression; они понижаются в
 stack-based `HAL_CALL`, возвращая RX byte как `int`. SPI bus ограничен `0..255`,
@@ -85,8 +90,8 @@ HAL backend, поэтому сохраняется между `VirtualMachine.Re
 Аргументы pin/mode/delay HAL должны оставаться compile-time константами. `analogWrite(pin, duty)`
 принимает compile-time pin и runtime/compile-time duty в диапазоне `0..255` и
 понижается в динамический PWM HAL call. `do-while`,
-типы функций, локальных и глобальных переменных, отличные от `int`/`bool`, динамические
-глобальные initializer-ы и UART пока отклоняются с
+типов функций, локальных и глобальных переменных, отличные от `int`/`bool`, динамические
+глобальные initializer-ы и неподдерживаемые пользовательские классы отклоняются с
 диагностикой; неполная прошивка не создаётся.
 
 Для сборки target `rsma-build` включается опцией

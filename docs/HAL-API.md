@@ -71,6 +71,20 @@ HAL_GetTick();
 
 В bytecode `UartAvailable` и `UartRead` помещают результат на stack. `UartWrite` снимает одно целое значение со stack и принимает только диапазон `0..255`. Пример прошивки с polling и echo находится в `examples/uart_echo.cpp`.
 
+Source-level facade `Serial` использует UART port `0`: `begin(baudPreset)`
+принимает presets `0..4` (`9600..115200`), `available()` возвращает размер RX
+FIFO, `read()` извлекает следующий byte, а `write(value)` создаёт внешний
+`UartTransmit` trace event. RX injection и FIFO overflow остаются
+host/backend operations; polling не продвигает simulated time без `delay()` или
+`yield()`.
+
+Для deterministic host input `VirtualUartBank.ScheduleReceived(port, timestamp,
+data)` планирует RX packet на абсолютное simulated time. События упорядочиваются
+по `(timestamp, insertion sequence)`, bytes одного packet сохраняют FIFO-порядок,
+а VM учитывает ближайший UART timestamp как event boundary во время `WAIT`.
+После доставки каждый byte генерирует `UartReceive` trace event; непосредственный
+`InjectReceived` сохраняет прежнюю семантику немедленной host-инъекции.
+
 Значения частоты и задержки должны иметь фиксированные единицы и явно документированную точность. Сетевой backend не должен передавать каждую VM-инструкцию; границей обмена являются периферийные события.
 
 ## 5. ADC и виртуальный аналоговый датчик

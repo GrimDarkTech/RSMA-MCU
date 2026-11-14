@@ -335,6 +335,17 @@ Source-level `attachInterrupt()`/`detachInterrupt()` также завершён
 generated firmware, negative builder cases и Unity edge/detach acceptance
 покрыты. Общие function pointers и `micros()` остаются вне текущего scope.
 
+Source-level UART v1 завершён для builtin `Serial` facade port 0: `begin`,
+`available`, `read`, `write`, compile-time baud validation, generated echo
+firmware, FIFO-driven Unity acceptance, UART trace и invalid preset test
+покрыты. `Serial1+`, callbacks и packet framing остаются следующими
+расширениями.
+
+UART RX scheduling v1 также завершён: `VirtualUartBank` принимает timestamped
+packets с детерминированным FIFO/insertion ordering, VM учитывает UART input
+events при ожидании, а `UartReceive` добавлен в trace contract. Полноценные
+callbacks и packet framing по-прежнему не входят в source API.
+
 Benchmark baseline для virtual VM зафиксирован локальным Unity EditMode
 прогоном `VirtualMcuPerformanceTests` на Unity `6000.3.16f1`, Windows Editor,
 Mono, Ryzen 5 3600. Workload использует 8192 операций и 12 измерений после

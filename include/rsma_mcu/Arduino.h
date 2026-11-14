@@ -32,10 +32,20 @@ void yield();
 void attachInterrupt(int pin, void (*handler)(), int mode);
 void detachInterrupt(int pin);
 
+}
+
+class SerialPort
+{
+public:
+    void begin(int baudPreset);
+    int available();
+    int read();
+    void write(int value);
+};
+
+extern SerialPort Serial;
 #define DMA_INVALID (-1)
 #define DMA_QUEUE_FULL (-2)
 #define DMA_QUEUED 0
 #define DMA_ACTIVE 1
 #define DMA_COMPLETE 2
-
-}

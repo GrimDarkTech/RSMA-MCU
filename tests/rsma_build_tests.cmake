@@ -159,6 +159,32 @@ foreach(required_text "ATTACH_IRQ" "DETACH_IRQ" "ENABLE_IRQ" "RETURN_IRQ" "Perip
     endif()
 endforeach()
 
+set(serial_output "${OUTPUT_DIR}/serial-echo.rsfw")
+execute_process(
+    COMMAND "${RSMA_BUILD}" "${SOURCE_DIR}/serial_echo.cpp" -o "${serial_output}"
+    RESULT_VARIABLE serial_result
+    OUTPUT_VARIABLE serial_stdout
+    ERROR_VARIABLE serial_stderr
+)
+if(NOT serial_result EQUAL 0)
+    message(FATAL_ERROR "rsma-build rejected Serial echo fixture:\n${serial_stdout}\n${serial_stderr}")
+endif()
+execute_process(
+    COMMAND "${RSMA_INSPECT}" "${serial_output}"
+    RESULT_VARIABLE serial_inspect_result
+    OUTPUT_VARIABLE serial_inspect_stdout
+    ERROR_VARIABLE serial_inspect_stderr
+)
+if(NOT serial_inspect_result EQUAL 0)
+    message(FATAL_ERROR "Serial echo firmware is invalid:\n${serial_inspect_stderr}")
+endif()
+foreach(required_text "HAL_CALL" "WAIT" "HALT" "Peripherals: UART SYSTICK")
+    string(FIND "${serial_inspect_stdout}" "${required_text}" serial_text_index)
+    if(serial_text_index EQUAL -1)
+        message(FATAL_ERROR "Serial echo firmware is missing '${required_text}':\n${serial_inspect_stdout}")
+    endif()
+endforeach()
+
 set(analog_threshold_output "${OUTPUT_DIR}/analog-threshold-pwm.rsfw")
 execute_process(
     COMMAND "${RSMA_BUILD}" "${SOURCE_DIR}/analog_threshold_pwm.cpp" -o "${analog_threshold_output}"
@@ -465,6 +491,54 @@ foreach(fixture_and_message IN ITEMS
         message(FATAL_ERROR "${fixture_name} received the wrong diagnostic:\n${rejected_stderr}")
     endif()
 endforeach()
+
+set(serial_invalid_output "${OUTPUT_DIR}/serial-invalid-baud.rsfw")
+execute_process(
+    COMMAND "${RSMA_BUILD}" "${SOURCE_DIR}/serial_invalid_baud.cpp" -o "${serial_invalid_output}"
+    RESULT_VARIABLE serial_invalid_result
+    OUTPUT_VARIABLE serial_invalid_stdout
+    ERROR_VARIABLE serial_invalid_stderr
+)
+if(serial_invalid_result EQUAL 0 OR EXISTS "${serial_invalid_output}")
+    message(FATAL_ERROR "rsma-build accepted invalid Serial baud preset")
+endif()
+if(NOT "${serial_invalid_stderr}" MATCHES "Serial.begin baud preset must be between 0 and 4")
+    message(FATAL_ERROR "invalid Serial baud received the wrong diagnostic:\n${serial_invalid_stderr}")
+endif()
+
+set(serial_arguments_output "${OUTPUT_DIR}/serial-invalid-arguments.rsfw")
+execute_process(
+    COMMAND "${RSMA_BUILD}" "${SOURCE_DIR}/serial_invalid_arguments.cpp" -o "${serial_arguments_output}"
+    RESULT_VARIABLE serial_arguments_result
+    OUTPUT_VARIABLE serial_arguments_stdout
+    ERROR_VARIABLE serial_arguments_stderr
+)
+if(serial_arguments_result EQUAL 0 OR EXISTS "${serial_arguments_output}")
+    message(FATAL_ERROR "rsma-build accepted invalid Serial argument count")
+endif()
+if(NOT "${serial_arguments_stderr}" MATCHES "too many arguments to function call")
+    message(FATAL_ERROR "invalid Serial argument count received the wrong diagnostic:\n${serial_arguments_stderr}")
+endif()
+
+set(serial_write_output "${OUTPUT_DIR}/serial-invalid-write.rsfw")
+execute_process(
+    COMMAND "${RSMA_BUILD}" "${SOURCE_DIR}/serial_invalid_write.cpp" -o "${serial_write_output}"
+    RESULT_VARIABLE serial_write_result
+    OUTPUT_VARIABLE serial_write_stdout
+    ERROR_VARIABLE serial_write_stderr
+)
+if(NOT serial_write_result EQUAL 0)
+    message(FATAL_ERROR "rsma-build rejected runtime UART byte-range fixture:\n${serial_write_stdout}\n${serial_write_stderr}")
+endif()
+execute_process(
+    COMMAND "${RSMA_INSPECT}" "${serial_write_output}"
+    RESULT_VARIABLE serial_write_inspect_result
+    OUTPUT_VARIABLE serial_write_inspect_stdout
+    ERROR_VARIABLE serial_write_inspect_stderr
+)
+if(NOT serial_write_inspect_result EQUAL 0)
+    message(FATAL_ERROR "runtime UART byte-range firmware is invalid:\n${serial_write_inspect_stderr}")
+endif()
 
 set(invalid_output "${OUTPUT_DIR}/unsupported.rsfw")
 execute_process(
