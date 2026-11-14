@@ -350,15 +350,24 @@ validation, function-entry patching и `ATTACH_UART_RX`/`DETACH_UART_RX` lowerin
 VM dispatch выполняется после FIFO delivery через отдельный non-reentrant
 callback state и `RETURN_UART_RX`. Generated callback fixture, trace ordering
 `UartReceive -> UartCallback -> UartTransmit` и PlayMode acceptance покрыты.
-Packet framing/HITL integration остаются следующим расширением.
+Packet framing/HITL integration теперь продолжены source-level packet API:
+`attachPacketReceive(void handler())`/`detachPacketReceive()` и bounded payload
+accessors `packetAvailable()`/`packetRead()`/`packetType()` добавлены для
+builtin facades. Только CRC-valid complete HITL frames вызывают packet handler;
+отдельные packet opcodes, queue и trace ordering покрыты builder fixture и
+PlayMode acceptance.
 
 HITL v1 streaming framing increment также добавлен на transport boundary:
 `HitlFrameParser` и `HitlFrameStreamDecoder` принимают fragmented/concatenated
 byte chunks, ограничивают внутренний buffer максимальным v1 frame size,
 отклоняют CRC/version/type/length failures без остановки потока и
-resynchronize-ятся по `RSMH`. Source-level packet callbacks намеренно не
-добавлены: для них сначала требуется определить byte-array/payload ownership
-contract, чтобы не замаскировать transport framing под VM instruction API.
+Source-level packet callbacks теперь добавлены для builtin UART facades:
+`attachPacketReceive(void handler())`/`detachPacketReceive()` используют
+`ATTACH_UART_PACKET_RX`/`DETACH_UART_PACKET_RX`, а payload доступен через
+`packetAvailable()`/`packetRead()` и `packetType()`. Только CRC-valid complete
+frames создают callback; bounded packet queue и non-reentrant dispatch покрыты
+builder fixture и PlayMode acceptance. Более богатые payload ownership/array
+semantics остаются отдельным будущим расширением.
 
 Benchmark baseline для virtual VM зафиксирован локальным Unity EditMode
 прогоном `VirtualMcuPerformanceTests` на Unity `6000.3.16f1`, Windows Editor,

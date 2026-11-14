@@ -43,6 +43,11 @@ public:
     void write(int value);
     void attachReceive(void (*handler)());
     void detachReceive();
+    void attachPacketReceive(void (*handler)());
+    void detachPacketReceive();
+    int packetAvailable();
+    int packetRead();
+    int packetType();
 };
 
 extern SerialPort Serial;

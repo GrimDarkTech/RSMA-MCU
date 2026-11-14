@@ -95,6 +95,15 @@ Source-level UART callbacks используют `Serial.attachReceive(handler)`
 порядок для echo: `UartReceive -> UartCallback -> UartTransmit`.
 Dispatch non-reentrant, а queued receives сохраняют FIFO/insertion ordering.
 
+Packet API использует отдельный `ATTACH_UART_PACKET_RX`/`DETACH_UART_PACKET_RX`
+binding и `RETURN_UART_PACKET_RX`. `UartPacketAvailable`, `UartPacketRead` и
+`UartPacketType` — HAL services `25..27`; они обращаются к текущему valid HITL
+packet на выбранном порту. CRC-invalid/incomplete frames отбрасываются
+streaming decoder-ом и не создают packet callback. `UartPacketReceive` и
+`UartPacketCallback` trace events позволяют отличить frame delivery от обычного
+byte-level `UartReceive`. После `RETURN_UART_PACKET_RX` текущий packet context
+закрывается и непрочитанный payload discard-ится.
+
 Значения частоты и задержки должны иметь фиксированные единицы и явно документированную точность. Сетевой backend не должен передавать каждую VM-инструкцию; границей обмена являются периферийные события.
 
 ## 5. ADC и виртуальный аналоговый датчик

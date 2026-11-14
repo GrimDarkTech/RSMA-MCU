@@ -39,6 +39,9 @@ bool is_known_opcode(Opcode opcode)
     case Opcode::AttachUartRx:
     case Opcode::DetachUartRx:
     case Opcode::ReturnUartRx:
+    case Opcode::AttachUartPacketRx:
+    case Opcode::DetachUartPacketRx:
+    case Opcode::ReturnUartPacketRx:
         return true;
     }
     return false;
@@ -93,7 +96,8 @@ ValidationResult validate_firmware(const FirmwarePackage& package)
             instruction.opcode == Opcode::CmpEqI32 || instruction.opcode == Opcode::CmpNeI32 ||
             instruction.opcode == Opcode::CmpGeI32 ||
             instruction.opcode == Opcode::CmpGtI32 || instruction.opcode == Opcode::ReturnIrq ||
-            instruction.opcode == Opcode::ReturnUartRx || instruction.opcode == Opcode::Yield) {
+            instruction.opcode == Opcode::ReturnUartRx || instruction.opcode == Opcode::ReturnUartPacketRx ||
+            instruction.opcode == Opcode::Yield) {
             if (!instruction.operands.empty()) {
                 return ValidationResult::failure("operandless instruction has operands");
             }
@@ -112,6 +116,20 @@ ValidationResult validate_firmware(const FirmwarePackage& package)
                 (static_cast<std::uint32_t>(instruction.operands[4]) << 24);
             if (target >= package.bytecode.instructions.size())
                 return ValidationResult::failure("ATTACH_UART_RX target is outside instruction list");
+        }
+        if (instruction.opcode == Opcode::DetachUartPacketRx) {
+            if (instruction.operands.size() != 1 || instruction.operands[0] >= 4)
+                return ValidationResult::failure("DETACH_UART_PACKET_RX contains an invalid port");
+        }
+        if (instruction.opcode == Opcode::AttachUartPacketRx) {
+            if (instruction.operands.size() != 5 || instruction.operands[0] >= 4)
+                return ValidationResult::failure("ATTACH_UART_PACKET_RX contains an invalid port or operands");
+            const auto target = static_cast<std::uint32_t>(instruction.operands[1]) |
+                (static_cast<std::uint32_t>(instruction.operands[2]) << 8) |
+                (static_cast<std::uint32_t>(instruction.operands[3]) << 16) |
+                (static_cast<std::uint32_t>(instruction.operands[4]) << 24);
+            if (target >= package.bytecode.instructions.size())
+                return ValidationResult::failure("ATTACH_UART_PACKET_RX target is outside instruction list");
         }
         if (instruction.opcode == Opcode::EnableIrq || instruction.opcode == Opcode::DisableIrq ||
             instruction.opcode == Opcode::ReturnIrq) {
@@ -176,7 +194,7 @@ ValidationResult validate_firmware(const FirmwarePackage& package)
                 (static_cast<std::uint16_t>(instruction.operands[1]) << 8);
             const auto value = instruction.operands[3];
             if (service < static_cast<std::uint16_t>(HalService::PinMode) ||
-                service > static_cast<std::uint16_t>(HalService::AnalogWrite)) {
+                service > static_cast<std::uint16_t>(HalService::UartPacketType)) {
                 return ValidationResult::failure("HAL_CALL contains an unknown service ID");
             }
             if (service == static_cast<std::uint16_t>(HalService::PinMode) && value > 1) {
@@ -200,6 +218,11 @@ ValidationResult validate_firmware(const FirmwarePackage& package)
                 if (service != static_cast<std::uint16_t>(HalService::UartBegin) && value != 0) {
                     return ValidationResult::failure("HAL UART reserved value must be zero");
                 }
+            }
+            if (service >= static_cast<std::uint16_t>(HalService::UartPacketAvailable) &&
+                service <= static_cast<std::uint16_t>(HalService::UartPacketType)) {
+                if (instruction.operands[2] >= 4 || value != 0)
+                    return ValidationResult::failure("HAL UART packet operation contains invalid operands");
             }
             if (service == static_cast<std::uint16_t>(HalService::AnalogRead) && value != 0) {
                 return ValidationResult::failure("HAL AnalogRead reserved value must be zero");

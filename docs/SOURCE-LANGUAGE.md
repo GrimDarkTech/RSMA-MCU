@@ -61,6 +61,13 @@ classes/member calls frontend не поддерживает.
 в deterministic event queue. В callback можно использовать `available()` и
 `read()` выбранной facade; возврат выполняется через `RETURN_UART_RX`.
 Callback не re-enters сам себя: новые RX bytes накапливаются до его возврата.
+Для валидированных HITL v1 frames доступны `attachPacketReceive(void handler())`,
+`detachPacketReceive()`, `packetAvailable()`, `packetRead()` и `packetType()`.
+Packet handler вызывается только после полного frame с корректным CRC; payload
+читается как bounded FIFO bytes текущего packet. `packetType()` возвращает
+message type `1..6`. Неполные или повреждённые frames source-level API не видит.
+После возврата packet handler текущий packet считается завершённым: непрочитанный
+остаток отбрасывается, а следующий queued packet доставляется отдельным callback.
 `spiTransfer(bus, value)` и `i2cTransfer(address, value)` принимают route/address
 как compile-time integer и TX byte как runtime expression; они понижаются в
 stack-based `HAL_CALL`, возвращая RX byte как `int`. SPI bus ограничен `0..255`,

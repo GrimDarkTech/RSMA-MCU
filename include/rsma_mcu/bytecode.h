@@ -39,6 +39,9 @@ enum class Opcode : std::uint8_t
     AttachUartRx = 0x1C,
     DetachUartRx = 0x1D,
     ReturnUartRx = 0x1E,
+    AttachUartPacketRx = 0x1F,
+    DetachUartPacketRx = 0x20,
+    ReturnUartPacketRx = 0x21,
 };
 
 constexpr std::uint16_t kBytecodeVersion = 1;
@@ -71,6 +74,9 @@ enum class HalService : std::uint16_t
     DmaReadByte = 22,
     DmaRelease = 23,
     AnalogWrite = 24,
+    UartPacketAvailable = 25,
+    UartPacketRead = 26,
+    UartPacketType = 27,
 };
 
 constexpr std::string_view opcode_name(Opcode opcode)
@@ -107,6 +113,9 @@ constexpr std::string_view opcode_name(Opcode opcode)
     case Opcode::AttachUartRx: return "ATTACH_UART_RX";
     case Opcode::DetachUartRx: return "DETACH_UART_RX";
     case Opcode::ReturnUartRx: return "RETURN_UART_RX";
+    case Opcode::AttachUartPacketRx: return "ATTACH_UART_PACKET_RX";
+    case Opcode::DetachUartPacketRx: return "DETACH_UART_PACKET_RX";
+    case Opcode::ReturnUartPacketRx: return "RETURN_UART_PACKET_RX";
     }
     return "UNKNOWN";
 }
