@@ -390,6 +390,65 @@ void test_hitl_stream_decoder_reassembles_and_recovers()
         "stream decoder reset did not clear rejection state");
 }
 
+void test_hitl_transport_ingress_is_bounded_and_fifo()
+{
+    HitlFrame first;
+    first.type = HitlMessageType::Data;
+    first.sequence = 10;
+    first.payload = {0xA1};
+    HitlFrame second;
+    second.type = HitlMessageType::SafeState;
+    second.sequence = 11;
+    second.payload = {0xB2};
+    const auto firstBytes = encode_hitl_frame(first);
+    const auto secondBytes = encode_hitl_frame(second);
+    const auto combined = [&] {
+        Bytes bytes = firstBytes;
+        bytes.insert(bytes.end(), secondBytes.begin(), secondBytes.end());
+        return bytes;
+    }();
+
+    HitlTransportIngress ingress;
+    ingress.ingest(std::span<const Byte>(combined).first(3));
+    require(ingress.pendingFrameCount() == 0, "transport ingress dispatched a fragmented frame early");
+    ingress.ingest(std::span<const Byte>(combined).subspan(3));
+    require(ingress.pendingFrameCount() == 2, "transport ingress did not queue concatenated frames");
+
+    HitlFrame decoded;
+    require(ingress.try_pop(decoded) && decoded.sequence == first.sequence,
+        "transport ingress FIFO returned the wrong first frame");
+    require(ingress.try_pop(decoded) && decoded.sequence == second.sequence,
+        "transport ingress FIFO returned the wrong second frame");
+    require(!ingress.try_pop(decoded), "empty transport ingress reported a frame");
+}
+
+void test_hitl_transport_ingress_drops_newest_on_queue_overflow()
+{
+    HitlTransportIngress ingress;
+    Bytes batch;
+    for (std::size_t index = 0; index < HitlTransportIngress::kMaxPendingFrames + 1; ++index) {
+        HitlFrame frame;
+        frame.type = HitlMessageType::Data;
+        frame.sequence = static_cast<std::uint32_t>(index);
+        frame.payload = {static_cast<Byte>(index)};
+        const auto encoded = encode_hitl_frame(frame);
+        batch.insert(batch.end(), encoded.begin(), encoded.end());
+    }
+
+    ingress.ingest(batch);
+
+    require(ingress.pendingFrameCount() == HitlTransportIngress::kMaxPendingFrames,
+        "transport ingress exceeded its bounded frame queue");
+    require(ingress.droppedFrameCount() == 1,
+        "transport ingress did not count the dropped newest frame");
+    HitlFrame frame;
+    for (std::size_t index = 0; index < HitlTransportIngress::kMaxPendingFrames; ++index) {
+        require(ingress.try_pop(frame) && frame.sequence == index,
+            "transport ingress changed FIFO order while dropping overflow");
+    }
+    require(!ingress.try_pop(frame), "transport ingress retained an overflow frame");
+}
+
 } // namespace
 
 int main(int argc, char** argv)
@@ -403,6 +462,8 @@ int main(int argc, char** argv)
         test_hitl_frame_round_trip_and_crc();
         test_hitl_codec_matches_shared_golden_vector();
         test_hitl_stream_decoder_reassembles_and_recovers();
+        test_hitl_transport_ingress_is_bounded_and_fifo();
+        test_hitl_transport_ingress_drops_newest_on_queue_overflow();
         std::cout << "All RSFW tests passed\n";
         return 0;
     } catch (const std::exception& error) {

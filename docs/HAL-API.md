@@ -104,6 +104,14 @@ streaming decoder-ом и не создают packet callback. `UartPacketReceiv
 byte-level `UartReceive`. После `RETURN_UART_PACKET_RX` текущий packet context
 закрывается и непрочитанный payload discard-ится.
 
+Host/backend transport должен передавать сырые chunks в transport ingress
+(`HitlTransportIngress::ingest` в native boundary или
+`VirtualUartBank.InjectTransportBytes` в Unity). Chunk может быть fragment,
+один frame или несколько concatenated frames; backend не обязан сам находить
+границы `RSMH`. Ingress bounded: максимум 256 ожидающих валидных frames;
+native adapter сохраняет FIFO и при overflow отбрасывает newest frame с
+счётчиком `droppedFrameCount`, Unity adapter отклоняет batch атомарно.
+
 Значения частоты и задержки должны иметь фиксированные единицы и явно документированную точность. Сетевой backend не должен передавать каждую VM-инструкцию; границей обмена являются периферийные события.
 
 ## 5. ADC и виртуальный аналоговый датчик

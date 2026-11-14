@@ -180,4 +180,40 @@ void HitlFrameStreamDecoder::reset()
     rejectedFrameCount_ = 0;
 }
 
+void HitlTransportIngress::ingest(std::span<const std::uint8_t> bytes)
+{
+    // Feed bounded chunks so a large read from a socket/serial backend cannot
+    // create a result vector proportional to the whole transport read.
+    while (!bytes.empty()) {
+        const auto chunkSize = std::min<std::size_t>(bytes.size(), kHitlMaxFrameSize);
+        const auto frames = decoder_.feed(bytes.first(chunkSize));
+        for (const auto& frame : frames) {
+            if (pendingFrames_.size() == kMaxPendingFrames) {
+                // Drop newest validated frames rather than blocking or
+                // throwing through the transport receive loop.
+                ++droppedFrameCount_;
+                continue;
+            }
+            pendingFrames_.push_back(frame);
+        }
+        bytes = bytes.subspan(chunkSize);
+    }
+}
+
+bool HitlTransportIngress::try_pop(HitlFrame& frame)
+{
+    if (pendingFrames_.empty())
+        return false;
+    frame = std::move(pendingFrames_.front());
+    pendingFrames_.pop_front();
+    return true;
+}
+
+void HitlTransportIngress::reset()
+{
+    decoder_.reset();
+    pendingFrames_.clear();
+    droppedFrameCount_ = 0;
+}
+
 } // namespace rsma_mcu

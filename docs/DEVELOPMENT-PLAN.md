@@ -368,6 +368,9 @@ Source-level packet callbacks теперь добавлены для builtin UAR
 builder fixture и PlayMode acceptance. Дополнительно покрыты fragmented frame,
 concatenated FIFO packets, zero-length payload, atomic queue overflow,
 malformed callback declarations, reset/re-dispatch и reader HAL operand checks.
+Native `HitlTransportIngress` теперь предоставляет явную bounded host/backend
+границу: raw transport chunks преобразуются в FIFO valid frames, CRC recovery
+остаётся внутри decoder, а overflow/rejection metrics доступны consumer-у.
 builder fixture и PlayMode acceptance. Более богатые payload ownership/array
 semantics остаются отдельным будущим расширением.
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <deque>
 #include <span>
 #include <string>
 #include <vector>
@@ -50,6 +51,29 @@ private:
     std::vector<std::uint8_t> buffer_;
     std::string lastError_;
     std::size_t rejectedFrameCount_ = 0;
+};
+
+// Host/backend transport boundary. It owns framing state and exposes only
+// validated frames to consumers; transport chunks may be fragmented or
+// concatenated and may be arbitrarily larger than one frame.
+class HitlTransportIngress
+{
+public:
+    static constexpr std::size_t kMaxPendingFrames = 256;
+
+    void ingest(std::span<const std::uint8_t> bytes);
+    bool try_pop(HitlFrame& frame);
+    void reset();
+
+    std::size_t pendingFrameCount() const { return pendingFrames_.size(); }
+    std::size_t rejectedFrameCount() const { return decoder_.rejectedFrameCount(); }
+    std::size_t droppedFrameCount() const { return droppedFrameCount_; }
+    const std::string& lastError() const { return decoder_.lastError(); }
+
+private:
+    HitlFrameStreamDecoder decoder_;
+    std::deque<HitlFrame> pendingFrames_;
+    std::size_t droppedFrameCount_ = 0;
 };
 
 } // namespace rsma_mcu
