@@ -128,9 +128,9 @@ seed, waveform и sampling settings дают воспроизводимый ре
 диагностируются при регистрации.
 
 Проверки: model waveform/sample-and-hold/deterministic-noise/calibration,
-backend registration и `VirtualMachine -> analogRead` по simulated time покрыты
-EditMode tests. Остался end-to-end scene test с собранным C++ firmware и
-физически наблюдаемым GPIO/PWM output как часть следующих P0/P1 vertical slices.
+backend registration, `VirtualMachine -> analogRead` по simulated time и
+source-built end-to-end scene fixture с `RSMAGPIO` adapter, GPIO/PWM output и
+unmapped-channel negative case покрыты Unity EditMode/PlayMode tests.
 
 ## Этап 7. Полноценная разработка систем «датчики -> управление»
 
@@ -291,7 +291,9 @@ test и безопасное поведение actuator outputs.
 
 Добавить реальные прикладные вертикальные срезы:
 
-1. `VirtualAnalogSensor -> ADC -> threshold -> digital relay/LED`.
+1. `VirtualAnalogSensor -> ADC -> threshold -> digital relay/LED` — базовый
+   source-built ADC/PWM slice уже реализован; следующий шаг — trace/telemetry
+   instrumentation и полноценная serialized Unity scene fixture.
 2. `Button/encoder -> IRQ -> debounced state machine -> PWM actuator`.
 3. `I2C temperature sensor -> calibration/filter -> fan PWM -> UART telemetry`.
 4. `SPI encoder -> position control -> motor driver -> fault input`.

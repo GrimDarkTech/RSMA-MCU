@@ -101,9 +101,10 @@ duplicate sensor, отсутствующий scene mapping и некоррект
 
 Model и backend contract покрыты Unity EditMode tests для waveform, sample-and-
 hold, deterministic noise seed, calibration, duplicate channel и
-`analogRead` по simulated time. Полная готовность sensor/control vertical slice
-требует дополнительного scene-теста `VirtualAnalogSensor -> analogRead ->
-threshold -> GPIO/PWM output` с firmware, собранной `rsma-build`.
+`analogRead` по simulated time. Source-built scene fixture дополнительно
+проверяет `VirtualAnalogSensor -> analogRead -> threshold -> dynamic
+analogWrite -> RSMAGPIO PWM output`, а unmapped ADC channel завершается
+диагностируемой ошибкой до запуска sensor.
 
 ## 6. Целевой контракт sensor/control platform
 
