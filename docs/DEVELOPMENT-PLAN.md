@@ -256,6 +256,17 @@ sensor/control firmware без ручного bytecode, reflection или C#-onl
 выполняется по simulated time, а waveform, noise, sampling и calibration
 проверяются trace-тестами.
 
+Реализовано: `VirtualAnalogSensor` подключается к ADC backend через
+`IVirtualAnalogInputSource`; Unity-independent model поддерживает constant,
+ramp, sine и AnimationCurve, deterministic noise по seed, sample-and-hold,
+physical units, raw range calibration, offset/gain и clamping в `0..4095`.
+Добавлены presets temperature, light, distance, position и test signal.
+Backend preflight диагностирует неподключённый ADC channel, duplicate sensor,
+unsupported ADC capability и invalid ranges до первого VM tick. `AnalogSample`
+trace и source-built PlayMode fixture проверяют путь `sensor -> analogRead ->
+threshold -> PWM` по simulated time. Raw firmware contract остаётся
+`analogRead() -> 0..4095`.
+
 ### 7.5. PWM, timers и исполнительные механизмы — P0/P1
 
 - Открыть PWM через C++ source API и связать его с board pin capabilities.
@@ -268,6 +279,17 @@ sensor/control firmware без ручного bytecode, reflection или C#-onl
 
 Критерий: firmware может управлять хотя бы LED, relay и PWM motor/servo без
 вызова C# facade; actuator получает детерминированный trace по simulated time.
+
+Реализовано: virtual PWM state хранит duty, digital level, frequency,
+phase и simulated-time update timestamp; legacy `analogWrite(pin, duty)`
+использует deterministic default `490 Hz`, overload с frequency сохраняет
+явную частоту. Добавлен Unity-independent `VirtualPwmActuatorModel` с
+saturation, direction, enable/brake/fault, slew/ramp и немедленным safe-state.
+Unity scene adapters доступны для LED, relay, servo и DC motor; они получают
+команду только из firmware PWM/GPIO state и не требуют C# facade calls.
+Reset, stop, VM fault, component disable и backend safe-state обнуляют output.
+EditMode/native fixtures проверяют frequency/phase, dynamic update, slew,
+safe-state и source path `analogWrite -> actuator output`.
 
 ### 7.6. IRQ, events и scheduling — P0/P1
 

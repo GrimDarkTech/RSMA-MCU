@@ -107,6 +107,58 @@ foreach(required_text "HAL_CALL" "HALT" "Peripherals: ADC")
     endif()
 endforeach()
 
+set(analog_threshold_output "${OUTPUT_DIR}/analog-threshold-pwm.rsfw")
+execute_process(
+    COMMAND "${RSMA_BUILD}" "${SOURCE_DIR}/analog_threshold_pwm.cpp" -o "${analog_threshold_output}"
+    RESULT_VARIABLE analog_threshold_result
+    OUTPUT_VARIABLE analog_threshold_stdout
+    ERROR_VARIABLE analog_threshold_stderr
+)
+if(NOT analog_threshold_result EQUAL 0)
+    message(FATAL_ERROR "rsma-build rejected analog threshold/PWM fixture:\n${analog_threshold_stdout}\n${analog_threshold_stderr}")
+endif()
+execute_process(
+    COMMAND "${RSMA_INSPECT}" "${analog_threshold_output}"
+    RESULT_VARIABLE analog_threshold_inspect_result
+    OUTPUT_VARIABLE analog_threshold_inspect_stdout
+    ERROR_VARIABLE analog_threshold_inspect_stderr
+)
+if(NOT analog_threshold_inspect_result EQUAL 0)
+    message(FATAL_ERROR "analog threshold/PWM firmware is invalid:\n${analog_threshold_inspect_stdout}\n${analog_threshold_inspect_stderr}")
+endif()
+foreach(required_text "HAL_CALL" "WAIT" "Peripherals: GPIO ADC PWM SYSTICK")
+    string(FIND "${analog_threshold_inspect_stdout}" "${required_text}" analog_threshold_text_index)
+    if(analog_threshold_text_index EQUAL -1)
+        message(FATAL_ERROR "analog threshold/PWM firmware is missing '${required_text}':\n${analog_threshold_inspect_stdout}")
+    endif()
+endforeach()
+
+set(pwm_actuator_output "${OUTPUT_DIR}/pwm-actuator.rsfw")
+execute_process(
+    COMMAND "${RSMA_BUILD}" "${SOURCE_DIR}/pwm_actuator.cpp" -o "${pwm_actuator_output}"
+    RESULT_VARIABLE pwm_actuator_result
+    OUTPUT_VARIABLE pwm_actuator_stdout
+    ERROR_VARIABLE pwm_actuator_stderr
+)
+if(NOT pwm_actuator_result EQUAL 0)
+    message(FATAL_ERROR "rsma-build rejected PWM actuator fixture:\n${pwm_actuator_stdout}\n${pwm_actuator_stderr}")
+endif()
+execute_process(
+    COMMAND "${RSMA_INSPECT}" "${pwm_actuator_output}"
+    RESULT_VARIABLE pwm_actuator_inspect_result
+    OUTPUT_VARIABLE pwm_actuator_inspect_stdout
+    ERROR_VARIABLE pwm_actuator_inspect_stderr
+)
+if(NOT pwm_actuator_inspect_result EQUAL 0)
+    message(FATAL_ERROR "PWM actuator firmware is invalid:\n${pwm_actuator_inspect_stdout}\n${pwm_actuator_inspect_stderr}")
+endif()
+foreach(required_text "HAL_CALL" "WAIT" "Peripherals: GPIO PWM SYSTICK")
+    string(FIND "${pwm_actuator_inspect_stdout}" "${required_text}" pwm_actuator_text_index)
+    if(pwm_actuator_text_index EQUAL -1)
+        message(FATAL_ERROR "PWM actuator firmware is missing '${required_text}':\n${pwm_actuator_inspect_stdout}")
+    endif()
+endforeach()
+
 set(millis_output "${OUTPUT_DIR}/millis-control.rsfw")
 execute_process(
     COMMAND "${RSMA_BUILD}" "${SOURCE_DIR}/millis_control.cpp" -o "${millis_output}"

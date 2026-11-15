@@ -144,6 +144,15 @@ duplicate sensor, отсутствующий scene mapping и некоррект
 диагностируются при регистрации. Raw значение после calibration ограничивается
 диапазоном `0..4095`, а units не влияют на значение, видимое firmware.
 
+Типовые preset-модели используют physical ranges `temperature: -40..125 degC`,
+`light: 0..1000 lux`, `distance: 0..400 cm` и `position: 0..100 %`. Эти
+диапазоны являются telemetry/Inspector metadata; ADC передаёт только
+калиброванный 12-bit raw sample. При `samplePeriodMilliseconds > 0` модель
+обновляет held sample на границе периода, а между границами возвращает тот же
+sample независимо от количества `analogRead` и host frames. При нулевом
+периоде sample вычисляется в текущей simulated time. Noise вычисляется
+детерминированно из `(seed, sample index)` и не зависит от порядка чтений.
+
 Model и backend contract покрыты Unity EditMode tests для waveform, sample-and-
 hold, deterministic noise seed, calibration, duplicate channel и
 `analogRead` по simulated time. Source-built scene fixture дополнительно
@@ -179,6 +188,21 @@ PWM source API поддерживает `analogWrite(pin, duty)` и overload
 `1..1000000` Hz и передаётся в `PwmWriteFrequency` HAL service. Pin должен иметь
 `Pwm` capability и `PWM` alternate route; native validator и Unity backend
 проверяют это до первого VM tick.
+
+Virtual PWM backend хранит отдельно duty (`0..255`), digital threshold level,
+frequency в Hz, phase и timestamp последнего update. Для legacy двухаргументного
+`analogWrite` frequency равна `490 Hz`. Phase вычисляется как fractional part
+`timestamp_ms * frequency_hz / 1000`; effective PWM level сравнивает phase с
+normalized duty и не зависит от числа Unity frames. `Reset`, safe-state, stop,
+VM fault и backend disconnect выставляют duty/effective output в zero.
+
+Исполнительный слой отделён от PWM HAL. `VirtualPwmActuatorModel` применяет
+saturation и optional slew rate, а также поддерживает `Led`, `Relay`, `Servo`
+и `DcMotor`; motor дополнительно имеет direction, enable, brake и fault.
+Physical output trace вычисляется по simulated time: firmware остаётся
+единственным источником команды, а Unity component только потребляет состояние
+actuator. Servo physical range по умолчанию `0..180`, DC motor использует
+signed range `-1..1`.
 
 ## 6. Целевой контракт sensor/control platform
 

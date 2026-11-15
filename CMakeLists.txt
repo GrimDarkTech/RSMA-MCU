@@ -102,6 +102,8 @@ if(RSMA_MCU_BUILD_BUILDER)
                     "-DOUTPUT_DIR=${CMAKE_CURRENT_BINARY_DIR}/builder-vectors"
                     -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/rsma_build_tests.cmake"
             )
+            set_tests_properties(rsma-build-cli-tests PROPERTIES
+                ENVIRONMENT "PATH=$<TARGET_FILE_DIR:rsma-build>\;$ENV{PATH}")
         endif()
     endif()
 
