@@ -271,8 +271,12 @@ void test_board_profiles()
 {
     const auto* stm32 = find_board_profile("RSMA-STM32F103");
     require(stm32 != nullptr, "STM32F103 board profile should be registered");
+    require(validate_board_profile(*stm32).valid,
+        "STM32F103 typed pin profile should validate");
     require(find_board_profile("RSMA-AVR-ATmega328P") != nullptr,
         "ATmega328P board profile should be registered");
+    require(validate_board_profile(*find_board_profile("RSMA-AVR-ATmega328P")).valid,
+        "ATmega328P typed pin profile should validate");
     require(find_board_profile("RSMA-UNKNOWN") == nullptr,
         "unknown board profile should not be registered");
 
@@ -281,6 +285,22 @@ void test_board_profiles()
         "STM32 package should validate against STM32 profile");
     require(!validate_firmware_for_board(package, "RSMA-AVR-ATmega328P").valid,
         "STM32 package should not validate against AVR profile");
+
+    auto invalidProfile = *stm32;
+    invalidProfile.pins.push_back(invalidProfile.pins.front());
+    require(!validate_board_profile(invalidProfile).valid,
+        "duplicate physical/virtual pin should be rejected");
+
+    invalidProfile = *stm32;
+    invalidProfile.pins[0].alternateFunctions.push_back({"EXTI", "EXTI11"});
+    require(!validate_board_profile(invalidProfile).valid,
+        "alternate route collision should be rejected");
+
+    invalidProfile = *stm32;
+    invalidProfile.pins[0].resetPullMode = PinPullMode::PullDown;
+    invalidProfile.pins[0].capabilities = PinCapability::DigitalInput;
+    require(!validate_board_profile(invalidProfile).valid,
+        "unsupported reset pull mode should be rejected");
 
     package.manifest.boardId = "RSMA-AVR-ATmega328P";
     package.manifest.flashSize = 32 * 1024;
