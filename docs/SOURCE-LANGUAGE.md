@@ -78,6 +78,10 @@ Packet handler вызывается только после полного frame
 message type `1..6`. Неполные или повреждённые frames source-level API не видит.
 После возврата packet handler текущий packet считается завершённым: непрочитанный
 остаток отбрасывается, а следующий queued packet доставляется отдельным callback.
+UART `write(value)` помещает byte в bounded TX FIFO; фактическая передача
+наблюдается по simulated time с frame duration `10 / baud`. При полном TX/RX
+FIFO byte отбрасывается с backend diagnostic/lost-byte counter. `read()` на
+пустом FIFO fault-ит VM, поэтому polling code должен проверять `available()`.
 `spiTransfer(bus, value)` и `i2cTransfer(address, value)` принимают route/address
 как compile-time integer и TX byte как runtime expression; они понижаются в
 stack-based `HAL_CALL`, возвращая RX byte как `int`. SPI bus ограничен `0..255`,

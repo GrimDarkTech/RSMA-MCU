@@ -745,6 +745,32 @@ if(NOT serial_write_inspect_result EQUAL 0)
     message(FATAL_ERROR "runtime UART byte-range firmware is invalid:\n${serial_write_inspect_stderr}")
 endif()
 
+set(serial_telemetry_output "${OUTPUT_DIR}/serial-telemetry.rsfw")
+execute_process(
+    COMMAND "${RSMA_BUILD}" "${SOURCE_DIR}/serial_telemetry.cpp" -o "${serial_telemetry_output}"
+    RESULT_VARIABLE serial_telemetry_result
+    OUTPUT_VARIABLE serial_telemetry_stdout
+    ERROR_VARIABLE serial_telemetry_stderr
+)
+if(NOT serial_telemetry_result EQUAL 0)
+    message(FATAL_ERROR "rsma-build rejected serial telemetry fixture:\n${serial_telemetry_stdout}\n${serial_telemetry_stderr}")
+endif()
+execute_process(
+    COMMAND "${RSMA_INSPECT}" "${serial_telemetry_output}"
+    RESULT_VARIABLE serial_telemetry_inspect_result
+    OUTPUT_VARIABLE serial_telemetry_inspect_stdout
+    ERROR_VARIABLE serial_telemetry_inspect_stderr
+)
+if(NOT serial_telemetry_inspect_result EQUAL 0)
+    message(FATAL_ERROR "serial telemetry firmware is invalid:\n${serial_telemetry_inspect_stderr}")
+endif()
+foreach(required_text "HAL_CALL" "WAIT" "Peripherals: UART SYSTICK")
+    string(FIND "${serial_telemetry_inspect_stdout}" "${required_text}" serial_telemetry_text_index)
+    if(serial_telemetry_text_index EQUAL -1)
+        message(FATAL_ERROR "serial telemetry firmware is missing '${required_text}':\n${serial_telemetry_inspect_stdout}")
+    endif()
+endforeach()
+
 set(invalid_output "${OUTPUT_DIR}/unsupported.rsfw")
 execute_process(
     COMMAND "${RSMA_BUILD}" "${SOURCE_DIR}/unsupported_loop.cpp" -o "${invalid_output}"

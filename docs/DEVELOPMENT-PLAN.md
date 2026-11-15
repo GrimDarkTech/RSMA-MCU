@@ -330,6 +330,21 @@ frames обрабатываются explicit clock policy и bounded callback bu
 Критерий: firmware отправляет telemetry и принимает commands из Unity scene,
 а FIFO/overflow/reset behavior покрыты EditMode и PlayMode tests.
 
+Реализовано: `VirtualUartBank` подключён к standalone VM, composed backend и
+Unity `RSMAVirtualMicrocontroller`. Source-level `Serial`/`Serial1`/`Serial2`/
+`Serial3` поддерживает `begin`, `available`, `read` и `write`; baud presets
+`9600..115200` зафиксированы в profile-independent contract. TX использует
+bounded FIFO на 256 bytes и simulated 10-bit frame timing (`10 / baud` seconds
+per byte); RX использует FIFO на 256 bytes и drop-newest policy при overflow.
+
+RX/TX overflow публикуют `UART_RX_OVERFLOW`/`UART_TX_OVERFLOW`, увеличивают
+счётчики потерянных bytes и не выбрасывают исключение из transport ingress.
+Пустой `read()` остаётся диагностируемой VM fault, поэтому firmware должна
+проверять `available()` перед чтением. Reset очищает RX/TX FIFO, scheduled RX,
+HITL parser state, counters и diagnostics. Unity endpoint экспортирует
+transmitted bytes и UART diagnostics, а serial telemetry fixture проверяет
+source -> RSFW -> VM -> simulated transport path.
+
 ### 7.8. Register-level SPI/I2C и virtual devices — P1
 
 Текущие `spiTransfer` и `i2cTransfer` являются byte-level response stubs и

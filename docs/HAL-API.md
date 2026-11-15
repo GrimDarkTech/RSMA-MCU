@@ -196,6 +196,15 @@ maximum clamp-ится с diagnostic, поэтому большой host tick н
 неограниченный catch-up. Periodic callbacks используют simulated timestamp и
 bounded callback budget.
 
+UART contract: baud presets `0..4` соответствуют `9600`, `19200`, `38400`,
+`57600`, `115200`; каждый frame занимает 10 bits. TX и RX FIFO имеют capacity
+256 bytes. TX overflow и RX overflow используют drop-newest policy и публикуют
+`UART_TX_OVERFLOW`/`UART_RX_OVERFLOW` с lost-byte counters. `read()` при пустом
+FIFO возвращает диагностируемую ошибку, а `available()` не продвигает время.
+Scheduled RX, TX frame completion и callbacks привязаны к одному simulated
+clock; reset очищает очереди, parser state, counters и diagnostics. Unity
+backend предоставляет observable transmitted-byte endpoint и UART diagnostics.
+
 PWM source API поддерживает `analogWrite(pin, duty)` и overload
 `analogWrite(pin, duty, frequencyHz)`. Duty имеет диапазон `0..255`, frequency
 `1..1000000` Hz и передаётся в `PwmWriteFrequency` HAL service. Pin должен иметь
