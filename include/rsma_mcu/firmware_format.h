@@ -59,6 +59,7 @@ struct FirmwareManifest
     std::uint32_t ramSize = 0;
     std::string entryPointName;
     std::vector<std::string> requiredPeripherals;
+    std::vector<std::string> requiredRoutes;
 };
 
 struct BytecodeInstruction

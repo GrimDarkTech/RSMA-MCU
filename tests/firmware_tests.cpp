@@ -273,6 +273,8 @@ void test_board_profiles()
     require(stm32 != nullptr, "STM32F103 board profile should be registered");
     require(validate_board_profile(*stm32).valid,
         "STM32F103 typed pin profile should validate");
+    require(stm32->pins[10].alternateFunctions.size() >= 3,
+        "STM32F103 pin profile should expose ADC, IRQ and SPI routes");
     require(find_board_profile("RSMA-AVR-ATmega328P") != nullptr,
         "ATmega328P board profile should be registered");
     require(validate_board_profile(*find_board_profile("RSMA-AVR-ATmega328P")).valid,
@@ -281,10 +283,27 @@ void test_board_profiles()
         "unknown board profile should not be registered");
 
     auto package = make_package();
+    package.manifest.requiredRoutes.push_back("SPI@SPI1_MOSI");
     require(validate_firmware_for_board(package, *stm32).valid,
         "STM32 package should validate against STM32 profile");
+    package.manifest.requiredRoutes.push_back("SPI@SPI9_MOSI");
+    require(!validate_firmware_for_board(package, *stm32).valid,
+        "STM32 package should reject unavailable board route");
+    package.manifest.requiredRoutes.clear();
+    package.bytecode.instructions[0] = {Opcode::HalCall,
+        {static_cast<Byte>(HalService::PwmWrite), 0, 10, 128}};
+    require(!validate_firmware_for_board(package, *stm32).valid,
+        "STM32 package should reject PWM on a pin without PWM capability");
+    package.bytecode.instructions[0] = {Opcode::HalCall,
+        {static_cast<Byte>(HalService::PwmWrite), 0, 13, 128}};
+    require(validate_firmware_for_board(package, *stm32).valid,
+        "STM32 package should accept PWM on the mapped PWM pin");
     require(!validate_firmware_for_board(package, "RSMA-AVR-ATmega328P").valid,
         "STM32 package should not validate against AVR profile");
+    package.bytecode.instructions[0] = {Opcode::HalCall,
+        {static_cast<Byte>(HalService::PinMode), 0, 13, 1}};
+    package.bytecode.instructions[1] = {Opcode::HalCall,
+        {static_cast<Byte>(HalService::DigitalWrite), 0, 13, 1}};
 
     auto invalidProfile = *stm32;
     invalidProfile.pins.push_back(invalidProfile.pins.front());

@@ -59,6 +59,12 @@ struct AlternateFunction
     std::string route;
 };
 
+struct PhysicalRoute
+{
+    std::string portName;
+    std::string pinName;
+};
+
 struct PinDefinition
 {
     std::uint8_t virtualPin = 0;
@@ -70,6 +76,7 @@ struct PinDefinition
     bool resetLatchLevel = false;
     PinCapability capabilities = PinCapability::None;
     std::vector<AlternateFunction> alternateFunctions;
+    std::vector<PhysicalRoute> physicalRoutes;
 };
 
 struct BoardProfile

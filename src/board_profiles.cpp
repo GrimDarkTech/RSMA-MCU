@@ -8,42 +8,84 @@ namespace {
 
 const std::vector<BoardProfile>& profiles()
 {
+    const auto make_stm32_pins = [] {
+        std::vector<PinDefinition> pins;
+        for (std::uint8_t pinNumber = 0; pinNumber < 16; ++pinNumber) {
+            PinDefinition pin;
+            pin.virtualPin = pinNumber;
+            pin.portName = "PC";
+            pin.pinName = std::to_string(pinNumber);
+            pin.capabilities = PinCapability::DigitalInput | PinCapability::DigitalOutput |
+                PinCapability::PullUp | PinCapability::PullDown | PinCapability::OpenDrain |
+                PinCapability::ExternalInterrupt;
+            pin.alternateFunctions.push_back({"EXTI", "EXTI" + std::to_string(pinNumber)});
+            if (pinNumber <= 5 || pinNumber == 10) {
+                pin.capabilities = pin.capabilities | PinCapability::Analog;
+                pin.alternateFunctions.push_back({"ADC", "ADC" + std::to_string(pinNumber)});
+            }
+            if (pinNumber == 6 || pinNumber == 7 || pinNumber == 13) {
+                pin.capabilities = pin.capabilities | PinCapability::Pwm;
+                pin.alternateFunctions.push_back({"PWM", pinNumber == 6 ? "TIM3_CH1" :
+                    pinNumber == 7 ? "TIM3_CH2" : "TIM1_CH1"});
+            }
+            if (pinNumber == 8 || pinNumber == 10 || pinNumber == 13)
+                pin.alternateFunctions.push_back({"SPI", pinNumber == 8 ? "SPI1_MISO" :
+                    pinNumber == 10 ? "SPI1_MOSI" : "SPI1_SCK"});
+            if (pinNumber == 9 || pinNumber == 11)
+                pin.alternateFunctions.push_back({"I2C", pinNumber == 9 ? "I2C1_SCL" : "I2C1_SDA"});
+            if (pinNumber == 10)
+                pin.physicalRoutes.push_back({"PB", "13"});
+            if (pinNumber == 11)
+                pin.physicalRoutes.push_back({"PB", "14"});
+            if (pinNumber == 12)
+                pin.physicalRoutes.push_back({"PA", "10"});
+            if (pinNumber == 13)
+                pin.physicalRoutes.push_back({"PA", "11"});
+            pins.push_back(std::move(pin));
+        }
+        return pins;
+    };
+    const auto make_avr_pins = [] {
+        std::vector<PinDefinition> pins;
+        for (std::uint8_t pinNumber = 8; pinNumber < 14; ++pinNumber) {
+            PinDefinition pin;
+            pin.virtualPin = pinNumber;
+            pin.portName = "PB";
+            pin.pinName = std::to_string(pinNumber - 8);
+            pin.capabilities = PinCapability::DigitalInput | PinCapability::DigitalOutput |
+                PinCapability::OpenDrain | PinCapability::ExternalInterrupt;
+            pin.alternateFunctions.push_back({"EXTI", "EXTI" + std::to_string(pinNumber - 8)});
+            if (pinNumber == 8 || pinNumber == 9 || pinNumber == 11) {
+                pin.capabilities = pin.capabilities | PinCapability::Pwm;
+                pin.alternateFunctions.push_back({"PWM", pinNumber == 8 ? "TIM0_CH0" :
+                    pinNumber == 9 ? "TIM0_CH1" : "TIM2_CH2"});
+            }
+            if (pinNumber == 10 || pinNumber == 11)
+                pin.alternateFunctions.push_back({"SPI", pinNumber == 10 ? "SPI0_SS" : "SPI0_MOSI"});
+            if (pinNumber == 12)
+                pin.alternateFunctions.push_back({"I2C", "I2C0_SDA"});
+            if (pinNumber == 13) {
+                pin.capabilities = pin.capabilities | PinCapability::Analog;
+                pin.alternateFunctions.push_back({"ADC", "ADC0"});
+            }
+            pins.push_back(std::move(pin));
+        }
+        return pins;
+    };
     static const std::vector<BoardProfile> value{
         {
             "RSMA-STM32F103",
             64 * 1024,
             20 * 1024,
             {"GPIO", "SYSTICK", "IRQ", "PWM", "UART", "ADC", "SPI", "I2C", "DMA", "EEPROM"},
-            {
-                {10, "PC", "10", PinResetMode::Input, PinPullMode::None, PinOutputType::PushPull, false,
-                    PinCapability::DigitalInput | PinCapability::DigitalOutput | PinCapability::PullUp |
-                        PinCapability::PullDown | PinCapability::Analog | PinCapability::ExternalInterrupt,
-                    {{"ADC", "ADC10"}, {"EXTI", "EXTI10"}}},
-                {11, "PC", "11", PinResetMode::Input, PinPullMode::None, PinOutputType::PushPull, false,
-                    PinCapability::DigitalInput | PinCapability::DigitalOutput | PinCapability::PullUp |
-                        PinCapability::PullDown | PinCapability::ExternalInterrupt,
-                    {{"EXTI", "EXTI11"}}},
-                {13, "PC", "13", PinResetMode::Input, PinPullMode::None, PinOutputType::PushPull, false,
-                    PinCapability::DigitalInput | PinCapability::DigitalOutput | PinCapability::Pwm,
-                    {{"PWM", "TIM1_CH1"}}},
-            },
+            make_stm32_pins(),
         },
         {
             "RSMA-AVR-ATmega328P",
             32 * 1024,
             2 * 1024,
             {"GPIO", "SYSTICK", "IRQ", "PWM", "UART", "ADC", "SPI", "I2C", "EEPROM"},
-            {
-                {11, "PB", "3", PinResetMode::Input, PinPullMode::None, PinOutputType::PushPull, false,
-                    PinCapability::DigitalInput | PinCapability::DigitalOutput | PinCapability::Pwm,
-                    {{"PWM", "TIM2_CH2"}}},
-                {12, "PB", "4", PinResetMode::Input, PinPullMode::None, PinOutputType::PushPull, false,
-                    PinCapability::DigitalInput | PinCapability::DigitalOutput | PinCapability::ExternalInterrupt,
-                    {{"EXTI", "EXTI4"}}},
-                {13, "PB", "5", PinResetMode::Input, PinPullMode::None, PinOutputType::PushPull, false,
-                    PinCapability::DigitalInput | PinCapability::DigitalOutput | PinCapability::Analog,
-                    {{"ADC", "ADC0"}}},
-            },
+            make_avr_pins(),
         },
     };
     return value;
@@ -55,10 +97,114 @@ bool supports(const BoardProfile& profile, const std::string& peripheral)
         profile.supportedPeripherals.end();
 }
 
+bool supports_route(const BoardProfile& profile, const std::string& requirement)
+{
+    const auto separator = requirement.find('@');
+    const auto name = separator == std::string::npos ? std::string{} : requirement.substr(0, separator);
+    const auto route = separator == std::string::npos ? requirement : requirement.substr(separator + 1);
+    for (const auto& pin : profile.pins) {
+        for (const auto& alternate : pin.alternateFunctions) {
+            if ((name.empty() || alternate.name == name) && alternate.route == route)
+                return true;
+        }
+    }
+    return false;
+}
+
+const PinDefinition* find_pin(const BoardProfile& profile, std::uint8_t virtualPin)
+{
+    const auto found = std::find_if(profile.pins.begin(), profile.pins.end(),
+        [&](const PinDefinition& pin) { return pin.virtualPin == virtualPin; });
+    return found == profile.pins.end() ? nullptr : &*found;
+}
+
+bool has_alternate(const PinDefinition& pin, const std::string& name)
+{
+    return std::any_of(pin.alternateFunctions.begin(), pin.alternateFunctions.end(),
+        [&](const AlternateFunction& alternate) { return alternate.name == name; });
+}
+
+ValidationResult validate_firmware_pin_usage(const FirmwarePackage& package, const BoardProfile& profile)
+{
+    for (const auto& instruction : package.bytecode.instructions) {
+        if (instruction.opcode == Opcode::AttachIrq) {
+            const auto* pin = find_pin(profile, instruction.operands[0]);
+            if (pin == nullptr)
+                return ValidationResult::failure("firmware IRQ references an unmapped virtual pin");
+            if (!has_capability(pin->capabilities, PinCapability::ExternalInterrupt) ||
+                !has_alternate(*pin, "EXTI"))
+                return ValidationResult::failure("firmware IRQ references a pin without EXTI capability");
+            continue;
+        }
+        if (instruction.opcode != Opcode::HalCall)
+            continue;
+        const auto service = static_cast<HalService>(
+            static_cast<std::uint16_t>(instruction.operands[0]) |
+            (static_cast<std::uint16_t>(instruction.operands[1]) << 8));
+        const auto virtualPin = instruction.operands[2];
+        const auto* pin = find_pin(profile, virtualPin);
+        if (pin == nullptr &&
+            (service == HalService::PinMode || service == HalService::DigitalWrite ||
+                service == HalService::DigitalRead || service == HalService::ConfigurePin ||
+                service == HalService::PwmWrite || service == HalService::AnalogWrite ||
+                service == HalService::AnalogRead))
+            return ValidationResult::failure("firmware HAL call references an unmapped virtual pin");
+        if (pin == nullptr)
+            continue;
+        switch (service) {
+        case HalService::PinMode:
+            if (instruction.operands[3] == 0 && !has_capability(pin->capabilities, PinCapability::DigitalInput))
+                return ValidationResult::failure("firmware pin mode requires digital input capability");
+            if (instruction.operands[3] == 1 && !has_capability(pin->capabilities, PinCapability::DigitalOutput))
+                return ValidationResult::failure("firmware pin mode requires digital output capability");
+            break;
+        case HalService::DigitalRead:
+            if (!has_capability(pin->capabilities, PinCapability::DigitalInput))
+                return ValidationResult::failure("firmware digital read requires digital input capability");
+            break;
+        case HalService::DigitalWrite:
+            if (!has_capability(pin->capabilities, PinCapability::DigitalOutput))
+                return ValidationResult::failure("firmware digital write requires digital output capability");
+            break;
+        case HalService::ConfigurePin: {
+            const auto config = instruction.operands[3];
+            const auto mode = config & 0x01;
+            if (mode == 0 && !has_capability(pin->capabilities, PinCapability::DigitalInput))
+                return ValidationResult::failure("firmware GPIO configuration requires digital input capability");
+            if (mode == 1 && !has_capability(pin->capabilities, PinCapability::DigitalOutput))
+                return ValidationResult::failure("firmware GPIO configuration requires digital output capability");
+            const auto pull = (config >> 1) & 0x03;
+            if (pull == static_cast<std::uint8_t>(PinPullMode::PullUp) &&
+                !has_capability(pin->capabilities, PinCapability::PullUp))
+                return ValidationResult::failure("firmware GPIO configuration requires pull-up capability");
+            if (pull == static_cast<std::uint8_t>(PinPullMode::PullDown) &&
+                !has_capability(pin->capabilities, PinCapability::PullDown))
+                return ValidationResult::failure("firmware GPIO configuration requires pull-down capability");
+            if ((config & 0x08) != 0 && !has_capability(pin->capabilities, PinCapability::OpenDrain))
+                return ValidationResult::failure("firmware GPIO configuration requires open-drain capability");
+            break;
+        }
+        case HalService::PwmWrite:
+        case HalService::AnalogWrite:
+            if (!has_capability(pin->capabilities, PinCapability::Pwm) || !has_alternate(*pin, "PWM"))
+                return ValidationResult::failure("firmware PWM call references a pin without PWM route");
+            break;
+        case HalService::AnalogRead:
+            if (!has_capability(pin->capabilities, PinCapability::Analog) || !has_alternate(*pin, "ADC"))
+                return ValidationResult::failure("firmware ADC call references a pin without ADC route");
+            break;
+        default:
+            break;
+        }
+    }
+    return ValidationResult::success();
+}
+
 ValidationResult validate_pin_definition(const PinDefinition& pin,
     std::unordered_set<std::uint8_t>& virtualPins,
     std::unordered_set<std::string>& physicalPins,
-    std::unordered_set<std::string>& alternateRoutes)
+    std::unordered_set<std::string>& alternateRoutes,
+    std::unordered_set<std::string>& declaredPhysicalRoutes)
 {
     if (pin.portName.empty() || pin.pinName.empty())
         return ValidationResult::failure("board profile pin has an empty physical mapping");
@@ -67,6 +213,13 @@ ValidationResult validate_pin_definition(const PinDefinition& pin,
     const auto physicalKey = pin.portName + "." + pin.pinName;
     if (!physicalPins.insert(physicalKey).second)
         return ValidationResult::failure("board profile contains a duplicate physical pin: " + physicalKey);
+    for (const auto& physicalRoute : pin.physicalRoutes) {
+        if (physicalRoute.portName.empty() || physicalRoute.pinName.empty())
+            return ValidationResult::failure("board profile contains an empty alternate physical route");
+        const auto routeKey = physicalRoute.portName + "." + physicalRoute.pinName;
+        if (!declaredPhysicalRoutes.insert(routeKey).second)
+            return ValidationResult::failure("board profile contains a duplicate physical route: " + routeKey);
+    }
     if (pin.resetMode == PinResetMode::Input && !has_capability(pin.capabilities, PinCapability::DigitalInput))
         return ValidationResult::failure("board profile reset input is unsupported for pin " + std::to_string(pin.virtualPin));
     if (pin.resetMode == PinResetMode::Output && !has_capability(pin.capabilities, PinCapability::DigitalOutput))
@@ -105,8 +258,10 @@ ValidationResult validate_board_profile(const BoardProfile& profile)
     std::unordered_set<std::uint8_t> virtualPins;
     std::unordered_set<std::string> physicalPins;
     std::unordered_set<std::string> alternateRoutes;
+    std::unordered_set<std::string> declaredPhysicalRoutes;
     for (const auto& pin : profile.pins) {
-        const auto result = validate_pin_definition(pin, virtualPins, physicalPins, alternateRoutes);
+        const auto result = validate_pin_definition(pin, virtualPins, physicalPins, alternateRoutes,
+            declaredPhysicalRoutes);
         if (!result.valid)
             return result;
     }
@@ -131,6 +286,13 @@ ValidationResult validate_firmware_for_board(const FirmwarePackage& package, con
         if (!supports(profile, peripheral))
             return ValidationResult::failure("firmware requires unsupported peripheral: " + peripheral);
     }
+    for (const auto& route : package.manifest.requiredRoutes) {
+        if (!supports_route(profile, route))
+            return ValidationResult::failure("firmware requires unavailable board route: " + route);
+    }
+    const auto usageResult = validate_firmware_pin_usage(package, profile);
+    if (!usageResult.valid)
+        return usageResult;
     return ValidationResult::success();
 }
 

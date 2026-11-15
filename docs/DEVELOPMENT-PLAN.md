@@ -196,16 +196,19 @@ state. Reset возвращает периферийные регистры/вы
 Критерий: board configuration отклоняет конфликтную схему до загрузки
 firmware, а тест pin capabilities проходит одинаково в validator и Unity.
 
-Прогресс: добавлена typed pin schema в native `BoardProfile` и Unity
+Статус: **завершён**. Добавлена typed pin schema в native `BoardProfile` и Unity
 `VirtualBoardProfile`: digital input/output, pull-up/down, open-drain, analog,
 PWM и external IRQ capabilities, reset defaults и alternate-function routes.
 Оба профиля проверяют duplicate virtual/physical mappings, duplicate alternate
 routes и несовместимые reset mode/pull/output settings; Unity adapter отклоняет
 unsupported GPIO/PWM/ADC operations до обращения к scene GPIO. STM32/AVR
 демонстрационные mappings теперь описаны в обеих моделях одинаковыми route
-идентификаторами. Оставшиеся части этапа — полный pin map, единый перенос
-manifest pin routes и runtime electrical model (high-Z, external drive,
-open-drain release и line conflicts).
+идентификаторами и проверяется доступность SPI/I2C routes. Backend выполняет
+preflight конкретных GPIO/PWM/ADC/IRQ routes до первого VM tick, а scene
+bindings обязаны совпадать с board profile. Runtime electrical model содержит
+output latch, effective line, high-Z, pull bias, external drive, open-drain
+release и push-pull conflict diagnostics; reset/safe-state очищают external
+drive и запланированные входы и возвращают mapped pins в reset defaults.
 
 ### 7.3. Source-level API и язык прикладной прошивки — P0
 

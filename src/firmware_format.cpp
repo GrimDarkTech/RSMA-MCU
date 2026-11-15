@@ -319,7 +319,7 @@ Bytes encode_manifest(const FirmwareManifest& manifest)
 {
     BufferWriter writer;
     writer.bytes(Bytes{kManifestMagic.begin(), kManifestMagic.end()});
-    writer.u16(1);
+    writer.u16(manifest.requiredRoutes.empty() ? 1 : 2);
     writer.u16(0);
     writer.u32(manifest.flashSize);
     writer.u32(manifest.ramSize);
@@ -333,6 +333,14 @@ Bytes encode_manifest(const FirmwareManifest& manifest)
         writer.u16(checked_u16(peripheral.size(), "peripheral name"));
         writer.string_bytes(peripheral);
     }
+    if (!manifest.requiredRoutes.empty()) {
+        writer.u16(checked_u16(manifest.requiredRoutes.size(), "route count"));
+        writer.u16(0);
+        for (const auto& route : manifest.requiredRoutes) {
+            writer.u16(checked_u16(route.size(), "required route"));
+            writer.string_bytes(route);
+        }
+    }
     return std::move(writer).take();
 }
 
@@ -340,7 +348,8 @@ FirmwareManifest decode_manifest(const Bytes& data)
 {
     BufferReader reader(data);
     expect_magic(reader, kManifestMagic, "manifest");
-    if (reader.u16() != 1) {
+    const auto version = reader.u16();
+    if (version != 1 && version != 2) {
         throw FirmwareError("Unsupported manifest version");
     }
     reader.u16();
@@ -357,6 +366,13 @@ FirmwareManifest decode_manifest(const Bytes& data)
     manifest.requiredPeripherals.reserve(peripheralCount);
     for (std::uint16_t i = 0; i < peripheralCount; ++i) {
         manifest.requiredPeripherals.push_back(reader.string_bytes(reader.u16()));
+    }
+    if (version >= 2) {
+        const auto routeCount = reader.u16();
+        reader.u16();
+        manifest.requiredRoutes.reserve(routeCount);
+        for (std::uint16_t i = 0; i < routeCount; ++i)
+            manifest.requiredRoutes.push_back(reader.string_bytes(reader.u16()));
     }
     if (reader.position() != data.size()) {
         throw FirmwareError("Manifest contains trailing bytes");
