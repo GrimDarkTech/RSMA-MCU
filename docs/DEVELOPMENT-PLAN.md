@@ -305,6 +305,21 @@ safe-state и source path `analogWrite -> actuator output`.
 Критерий: button/encoder/fault input может безопасно запускать обработчик,
 а periodic control loop не зависит от случайного числа Unity frames.
 
+Реализовано: source-level `attachInterrupt`/`detachInterrupt` используют
+deterministic simulated-time edge queue. Scheduling policy фиксирует clock mode
+(`ScaledDeltaTime`, `UnscaledDeltaTime`, `Paused`), maximum host tick,
+interrupt priority, mask policy, non-reentrant dispatch, queue capacity и
+debounce interval. IRQ queue сортируется по `(timestamp, priority desc,
+sequence)`; nested ISR не запускается до `RETURN_IRQ`.
+
+Overflow, masked drop и debounce диагностируются без исключения из input
+callback: увеличивается lost-event counter, а в diagnostics/trace записывается
+`IRQ_QUEUE_OVERFLOW`, `IRQ_MASKED` или `IRQ_DEBOUNCED`. Existing `delay()`/`WAIT`
+и `yield()` являются source-level periodic wake-up без busy loop;
+`VirtualPeriodicScheduler` предоставляет deterministic simulated-time callbacks
+для backend/control tests. Pause, `Time.timeScale`, large host tick и dropped
+frames обрабатываются explicit clock policy и bounded callback budget.
+
 ### 7.7. UART и внешняя телеметрия — P1
 
 - Подключить существующий `VirtualUartBank` к scene backend и source API.

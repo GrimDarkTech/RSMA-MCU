@@ -163,7 +163,7 @@ analogWrite -> RSMAGPIO PWM output`, а unmapped ADC channel завершает�
 Для observability VM предоставляет bounded `VirtualTraceBuffer` и события
 `TimeAdvanced`, `AnalogSample`, `DigitalOutput`, `PwmOutput`, `HalCall`,
 `StateTransition`, `Interrupt`, `UartCallback`, `UartTransmit`, `UartReceive`,
-`RejectedMapping` и `Fault`.
+`RejectedMapping`, `SchedulingDiagnostic` и `Fault`.
 Каждое событие содержит monotonic sequence,
 simulated timestamp, channel/value и optional message. Trace доступен одинаково
 из standalone `VirtualMachine` и Unity `RSMAVirtualMicrocontroller`; переполнение
@@ -182,6 +182,19 @@ Source-level IRQ API использует deterministic GPIO edge queue:
 а `detachInterrupt(pin)` удаляет только binding указанного pin. ISR возвращается
 через `RETURN_IRQ`, восстанавливая interrupted VM state/wake time. Повторный edge
 после detach не dispatch-ится; edge mask `CHANGE` соответствует rising|falling.
+
+IRQ/scheduling policy задаётся virtual backend и не зависит от количества host
+frames. Default contract: non-reentrant ISR, `QueueWhileMasked`, queue capacity
+256, debounce `0 ms`, ordering по timestamp, затем priority descending и
+monotonic input sequence. Queue overflow/masked drop/debounce увеличивают
+lost-event counter и публикуют diagnostics/trace с кодами
+`IRQ_QUEUE_OVERFLOW`, `IRQ_MASKED`, `IRQ_DEBOUNCED`.
+
+Host clock policy явно определяет поведение при paused Unity и `Time.timeScale`:
+`ScaledDeltaTime`, `UnscaledDeltaTime` или `Paused`. Delta выше configured
+maximum clamp-ится с diagnostic, поэтому большой host tick не создаёт
+неограниченный catch-up. Periodic callbacks используют simulated timestamp и
+bounded callback budget.
 
 PWM source API поддерживает `analogWrite(pin, duty)` и overload
 `analogWrite(pin, duty, frequencyHz)`. Duty имеет диапазон `0..255`, frequency

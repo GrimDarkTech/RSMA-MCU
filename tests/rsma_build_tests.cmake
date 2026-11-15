@@ -185,6 +185,32 @@ foreach(required_text "HAL_CALL" "WAIT" "HALT" "Peripherals: GPIO SYSTICK")
     endif()
 endforeach()
 
+set(periodic_output "${OUTPUT_DIR}/periodic-scheduling.rsfw")
+execute_process(
+    COMMAND "${RSMA_BUILD}" "${SOURCE_DIR}/periodic_scheduling.cpp" -o "${periodic_output}"
+    RESULT_VARIABLE periodic_result
+    OUTPUT_VARIABLE periodic_stdout
+    ERROR_VARIABLE periodic_stderr
+)
+if(NOT periodic_result EQUAL 0)
+    message(FATAL_ERROR "rsma-build rejected periodic scheduling fixture:\n${periodic_stdout}\n${periodic_stderr}")
+endif()
+execute_process(
+    COMMAND "${RSMA_INSPECT}" "${periodic_output}"
+    RESULT_VARIABLE periodic_inspect_result
+    OUTPUT_VARIABLE periodic_inspect_stdout
+    ERROR_VARIABLE periodic_inspect_stderr
+)
+if(NOT periodic_inspect_result EQUAL 0)
+    message(FATAL_ERROR "periodic scheduling firmware is invalid:\n${periodic_inspect_stderr}")
+endif()
+foreach(required_text "HAL_CALL" "YIELD" "WAIT" "Peripherals: GPIO SYSTICK")
+    string(FIND "${periodic_inspect_stdout}" "${required_text}" periodic_text_index)
+    if(periodic_text_index EQUAL -1)
+        message(FATAL_ERROR "periodic scheduling firmware is missing '${required_text}':\n${periodic_inspect_stdout}")
+    endif()
+endforeach()
+
 set(stage73_output "${OUTPUT_DIR}/source-api-stage73.rsfw")
 execute_process(
     COMMAND "${RSMA_BUILD}" "${SOURCE_DIR}/source_api_stage73.cpp" -o "${stage73_output}"

@@ -50,6 +50,12 @@ signed `int` slot, поэтому арифметика за пределами s
 функцией `void handler()` и понижается в `ATTACH_IRQ`/`ENABLE_IRQ`.
 `detachInterrupt(pin)` понижает в `DETACH_IRQ` и удаляет binding только этого pin.
 Общая семантика function pointers не поддерживается.
+IRQ dispatch является non-reentrant: следующий edge ожидает `RETURN_IRQ`.
+Priority, masking, debounce, queue capacity и host clock policy задаются virtual
+backend, а не source firmware. `millis()`/`micros()` читают simulated clock;
+`delay()`/`WAIT` и `yield()` передают управление scheduler, поэтому periodic
+control loop не зависит от числа Unity frames. При overflow или masked drop
+backend сохраняет diagnostic/lost-event counter вместо исключения из input path.
 UART ports `0..3` доступны через builtin facades `Serial`, `Serial1`, `Serial2`
 и `Serial3`: каждый объект предоставляет `begin(preset)` с compile-time preset
 `0..4`, `available()`, `read()` и `write(value)`. Объекты жёстко связаны с
