@@ -157,6 +157,25 @@ scene-level `RSMAGpioHalAdapter`. Следующий этап должен за�
 scene без ручной замены HAL-объектов; отсутствующий peripheral диагностируется
 до первого VM tick.
 
+Статус: **завершён**. `VirtualMcuBackend` объединяет GPIO, PWM (включая
+совместимый alias `TIM`), ADC, IRQ, UART, SPI, I2C, EEPROM и DMA capability
+providers, выполняет board/required-peripheral preflight при `Configure` и
+управляет lifecycle (`Created -> Configured -> Running`, `Reset`, `Stop`,
+`SafeState`, `Faulted`). Одинаковый `pwm_motor_test.rsfw` проверяется через
+backend в standalone PlayMode fixture и через `RSMAVirtualMicrocontroller` /
+`RSMAGpioHalAdapter` в Unity scene; EditMode покрывает capability discovery,
+отказ preflight до VM tick и reset/safe-state.
+
+Ownership/reset contract: backend владеет lifecycle и объединением providers;
+отдельные периферийные providers владеют своими очередями, FIFO, DMA и output
+state. Reset возвращает периферийные регистры/выходы в reset state, отменяет
+очередь DMA и планированные входные события; EEPROM остаётся persistent при
+обычном reset и очищается только явной storage-clear операцией; bindings и
+зарегистрированные scene sensors принадлежат Unity-компоненту и отключаются
+при его уничтожении. Отсутствующие firmware capabilities диагностируются до
+первого VM tick. Подробная проверка board pin capabilities и электрических
+состояний остаётся в границах этапа 7.2.
+
 ### 7.2. Board profile, pin capabilities и электрическая модель — P0
 
 - Расширить STM32/AVR pin maps с текущих демонстрационных наборов до полного
