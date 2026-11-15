@@ -77,6 +77,8 @@ enum class HalService : std::uint16_t
     UartPacketAvailable = 25,
     UartPacketRead = 26,
     UartPacketType = 27,
+    PwmWriteFrequency = 28,
+    Micros = 29,
 };
 
 constexpr std::string_view opcode_name(Opcode opcode)

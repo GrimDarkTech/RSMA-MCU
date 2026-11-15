@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "rsma_mcu/firmware_format.h"
+#include "rsma_mcu/board_profiles.h"
 
 namespace {
 
@@ -56,9 +57,12 @@ CXChildVisitResult find_main(CXCursor cursor, CXCursor, CXClientData clientData)
             }
         }
         if (clang_getCursorKind(cursor) == CXCursor_VarDecl &&
-            clang_getCursorKind(clang_getCursorLexicalParent(cursor)) == CXCursor_TranslationUnit &&
-            ClangString(clang_getTypeSpelling(clang_getCursorType(cursor))).str() != "SerialPort")
-            context.globalVariables.push_back(cursor);
+            clang_getCursorKind(clang_getCursorLexicalParent(cursor)) == CXCursor_TranslationUnit) {
+            const auto type = ClangString(clang_getTypeSpelling(clang_getCursorType(cursor))).str();
+            const bool serialFacade = type.find("SerialPort") != std::string::npos;
+            if (!serialFacade)
+                context.globalVariables.push_back(cursor);
+        }
     } catch (...) {
         context.failure = std::current_exception();
         return CXChildVisit_Break;
@@ -394,7 +398,8 @@ void emit_expression(CXCursor cursor, BodyContext& context)
             function.name == "dmaTransfer" || function.name == "eepromRead" ||
             function.name == "dmaBufferRead" || function.name == "dmaSubmit" ||
             function.name == "dmaStatus" || function.name == "dmaReadByte" ||
-            function.name == "dmaRelease" || function.name == "millis") {
+            function.name == "dmaRelease" || function.name == "millis" ||
+            function.name == "micros") {
             if (!is_builtin_hal_declaration(function.declaration))
                 fail_at(cursor, "HAL call must resolve to the declaration in <rsma_mcu/Arduino.h>");
             const auto argumentCount = clang_Cursor_getNumArguments(cursor);
@@ -457,6 +462,14 @@ void emit_expression(CXCursor cursor, BodyContext& context)
             if ((function.name == "digitalRead" || function.name == "analogRead" ||
                 function.name == "eepromRead") && argumentCount != 1)
                 fail_at(cursor, function.name + " expects one argument");
+            if (function.name == "millis" || function.name == "micros") {
+                if (argumentCount != 0)
+                    fail_at(cursor, function.name + " expects no arguments");
+                append_hal_call(*context.program,
+                    function.name == "millis" ? HalService::Millis : HalService::Micros, 0, 0);
+                context.peripherals->emplace_back("SYSTICK");
+                return;
+            }
             if (function.name != "digitalRead" && function.name != "analogRead" &&
                 function.name != "eepromRead" && argumentCount != 2)
                 fail_at(cursor, function.name + " expects route and value arguments");
@@ -692,7 +705,7 @@ void lower_call(CXCursor cursor, BodyContext& context)
         name == "i2cTransfer" || name == "dmaTransfer" || name == "eepromRead" ||
         name == "eepromWrite" || name == "dmaBufferWrite" || name == "dmaBufferRead" ||
         name == "dmaSubmit" || name == "dmaStatus" || name == "dmaReadByte" ||
-        name == "dmaRelease" || name == "millis" || name == "delay" || name == "yield" ||
+        name == "dmaRelease" || name == "millis" || name == "micros" || name == "delay" || name == "yield" ||
         name == "attachInterrupt" || name == "detachInterrupt" || serialMember;
     if (halName && !is_builtin_hal_declaration(function.declaration)) {
         fail_at(cursor, "HAL call must resolve to the declaration in <rsma_mcu/Arduino.h>");
@@ -980,6 +993,12 @@ void lower_call(CXCursor cursor, BodyContext& context)
         peripherals.emplace_back("SYSTICK");
         return;
     }
+    if (name == "micros") {
+        if (argumentCount != 0) fail_at(cursor, "micros expects no arguments");
+        append_hal_call(program, HalService::Micros, 0, 0);
+        peripherals.emplace_back("SYSTICK");
+        return;
+    }
     if (name == "analogRead") {
         if (argumentCount != 1) fail_at(cursor, "analogRead expects one argument");
         append_hal_call(program, HalService::AnalogRead, byteArgument(0, "ADC channel"), 0);
@@ -987,8 +1006,19 @@ void lower_call(CXCursor cursor, BodyContext& context)
         return;
     }
     if (name == "analogWrite") {
-        if (argumentCount != 2) fail_at(cursor, "analogWrite expects pin and duty arguments");
+        if (argumentCount != 2 && argumentCount != 3)
+            fail_at(cursor, "analogWrite expects pin, duty and optional frequency arguments");
         const auto pin = byteArgument(0, "PWM pin");
+        if (argumentCount == 3) {
+            const auto frequency = constant_integer(argument(2));
+            if (frequency < 1 || frequency > 1000000)
+                fail_at(argument(2), "PWM frequency must be between 1 and 1000000 Hz");
+            emit_expression(argument(1), context);
+            emit_const(program, static_cast<std::int32_t>(frequency));
+            append_hal_call(program, HalService::PwmWriteFrequency, pin, 0);
+            peripherals.emplace_back("PWM");
+            return;
+        }
         bool hasConstantDuty = true;
         std::int64_t duty = 0;
         try {
@@ -1500,6 +1530,10 @@ FirmwarePackage compile_source(const std::filesystem::path& sourcePath)
                 package.manifest.requiredPeripherals.push_back(peripheral);
             }
         }
+
+        const auto boardResult = validate_firmware_for_board(package, package.manifest.boardId);
+        if (!boardResult.valid)
+            throw FirmwareError("board capability validation failed: " + boardResult.error);
 
         clang_disposeTranslationUnit(translationUnit);
         clang_disposeIndex(index);

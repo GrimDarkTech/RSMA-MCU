@@ -1,6 +1,6 @@
 # Контракт исходного языка RSMA MCU
 
-## Точка входа
+## Точка входа и scheduler
 
 Первая версия frontend `rsma-build` принимает исходную программу с единственным
 определением точки входа:
@@ -12,10 +12,13 @@ int main()
 }
 ```
 
-`main` не принимает аргументов. Arduino-функции `setup()` и `loop()` не требуются,
-не генерируются и не вызываются неявно. Индекс первой инструкции скомпилированной
-функции `main` записывается в поле точки входа bytecode RSFW; диагностическое имя
-точки входа в manifest равно `main`. При исполнении используется числовой индекс.
+`main` не принимает аргументов. Он является scheduler-friendly точкой входа первой
+версии языка и заменяет пару Arduino `setup()`/`loop()`: начальная конфигурация
+выполняется в начале `main`, а периодическая работа размещается в `while` с
+`delay()` или `yield()`. `delay()` передаёт управление до указанного simulated
+timestamp, а `yield()` передаёт управление следующему host tick без добавления
+времени. Неявного вызова `setup()`/`loop()` нет, поэтому firmware с `main()`
+остаются совместимыми. Индекс первой инструкции записывается в RSFW entry point.
 
 Возврат из `main` завершает VM. Возвращаемое целое число не является кодом
 завершения процесса и отбрасывается VM.
@@ -36,11 +39,12 @@ Clang для разбора C++, но пока принимает в `main()` т
 текущий `Advance()` до следующего host tick, не добавляя времени ожидания.
 `analogRead(channel)` принимает compile-time channel `0..255` и понижает в
 `HAL_CALL` service `AnalogRead`; runtime возвращает 12-bit sample `0..4095`.
-`millis()` не принимает аргументов и понижается в `HAL_CALL` service `Millis`;
-runtime возвращает текущее deterministic simulated time в миллисекундах.
-Значение доступно как `int` expression в текущем frontend/VM integer model;
-переполнение за пределами signed VM range пока не моделируется как отдельный
-unsigned arithmetic contract.
+`millis()` и `micros()` не принимают аргументов и понижаются в `HAL_CALL` services
+`Millis` и `Micros`. Оба возвращают младшие 32 бита deterministic simulated time
+в миллисекундах и микросекундах; вызов не продвигает время. Для elapsed-time
+логики нужно использовать wrap-safe разность time values. VM хранит результат в
+signed `int` slot, поэтому арифметика за пределами signed VM range не является
+отдельным unsigned C++ contract.
 `attachInterrupt(pin, handler, mode)` принимает compile-time pin и mode
 `CHANGE`, `RISING` или `FALLING`; `handler` должен быть определённой в source
 функцией `void handler()` и понижается в `ATTACH_IRQ`/`ENABLE_IRQ`.
@@ -106,7 +110,10 @@ HAL backend, поэтому сохраняется между `VirtualMachine.Re
 очищается при `Reset()`.
 Аргументы pin/mode/delay HAL должны оставаться compile-time константами. `analogWrite(pin, duty)`
 принимает compile-time pin и runtime/compile-time duty в диапазоне `0..255` и
-понижается в динамический PWM HAL call. `do-while`,
+понижается в динамический PWM HAL call. Overload `analogWrite(pin, duty,
+frequencyHz)` принимает compile-time frequency `1..1000000` Hz и понижает duty и
+frequency в `PwmWriteFrequency`; pin обязан иметь PWM capability и alternate route
+выбранного board profile. `do-while`,
 типов функций, локальных и глобальных переменных, отличные от `int`/`bool`, динамические
 глобальные initializer-ы и неподдерживаемые пользовательские классы отклоняются с
 диагностикой; неполная прошивка не создаётся.

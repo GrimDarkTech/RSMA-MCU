@@ -146,7 +146,8 @@ ValidationResult validate_firmware_pin_usage(const FirmwarePackage& package, con
         if (pin == nullptr &&
             (service == HalService::PinMode || service == HalService::DigitalWrite ||
                 service == HalService::DigitalRead || service == HalService::ConfigurePin ||
-                service == HalService::PwmWrite || service == HalService::AnalogWrite ||
+                service == HalService::PwmWrite || service == HalService::PwmWriteFrequency ||
+                service == HalService::AnalogWrite ||
                 service == HalService::AnalogRead))
             return ValidationResult::failure("firmware HAL call references an unmapped virtual pin");
         if (pin == nullptr)
@@ -185,6 +186,7 @@ ValidationResult validate_firmware_pin_usage(const FirmwarePackage& package, con
             break;
         }
         case HalService::PwmWrite:
+        case HalService::PwmWriteFrequency:
         case HalService::AnalogWrite:
             if (!has_capability(pin->capabilities, PinCapability::Pwm) || !has_alternate(*pin, "PWM"))
                 return ValidationResult::failure("firmware PWM call references a pin without PWM route");

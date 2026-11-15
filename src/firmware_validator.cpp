@@ -194,7 +194,7 @@ ValidationResult validate_firmware(const FirmwarePackage& package)
                 (static_cast<std::uint16_t>(instruction.operands[1]) << 8);
             const auto value = instruction.operands[3];
             if (service < static_cast<std::uint16_t>(HalService::PinMode) ||
-                service > static_cast<std::uint16_t>(HalService::UartPacketType)) {
+                service > static_cast<std::uint16_t>(HalService::Micros)) {
                 return ValidationResult::failure("HAL_CALL contains an unknown service ID");
             }
             if (service == static_cast<std::uint16_t>(HalService::PinMode) && value > 1) {
@@ -226,6 +226,15 @@ ValidationResult validate_firmware(const FirmwarePackage& package)
             }
             if (service == static_cast<std::uint16_t>(HalService::AnalogRead) && value != 0) {
                 return ValidationResult::failure("HAL AnalogRead reserved value must be zero");
+            }
+            if ((service == static_cast<std::uint16_t>(HalService::Millis) ||
+                service == static_cast<std::uint16_t>(HalService::Micros)) &&
+                (instruction.operands[2] != 0 || value != 0)) {
+                return ValidationResult::failure("HAL time service operands must be zero");
+            }
+            if (service == static_cast<std::uint16_t>(HalService::PwmWriteFrequency) &&
+                value != 0) {
+                return ValidationResult::failure("HAL PWM frequency reserved value must be zero");
             }
             if ((service == static_cast<std::uint16_t>(HalService::SpiTransfer) ||
                 service == static_cast<std::uint16_t>(HalService::I2cTransfer) ||

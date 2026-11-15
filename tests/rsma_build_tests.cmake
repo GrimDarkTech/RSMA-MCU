@@ -133,6 +133,32 @@ foreach(required_text "HAL_CALL" "WAIT" "HALT" "Peripherals: GPIO SYSTICK")
     endif()
 endforeach()
 
+set(stage73_output "${OUTPUT_DIR}/source-api-stage73.rsfw")
+execute_process(
+    COMMAND "${RSMA_BUILD}" "${SOURCE_DIR}/source_api_stage73.cpp" -o "${stage73_output}"
+    RESULT_VARIABLE stage73_result
+    OUTPUT_VARIABLE stage73_stdout
+    ERROR_VARIABLE stage73_stderr
+)
+if(NOT stage73_result EQUAL 0)
+    message(FATAL_ERROR "rsma-build rejected stage 7.3 source API fixture:\n${stage73_stdout}\n${stage73_stderr}")
+endif()
+execute_process(
+    COMMAND "${RSMA_INSPECT}" "${stage73_output}"
+    RESULT_VARIABLE stage73_inspect_result
+    OUTPUT_VARIABLE stage73_inspect_stdout
+    ERROR_VARIABLE stage73_inspect_stderr
+)
+if(NOT stage73_inspect_result EQUAL 0)
+    message(FATAL_ERROR "stage 7.3 source API firmware is invalid:\n${stage73_inspect_stderr}")
+endif()
+foreach(required_text "HAL_CALL" "ATTACH_IRQ" "DETACH_IRQ" "Peripherals: GPIO IRQ PWM SYSTICK UART")
+    string(FIND "${stage73_inspect_stdout}" "${required_text}" stage73_text_index)
+    if(stage73_text_index EQUAL -1)
+        message(FATAL_ERROR "stage 7.3 source API firmware is missing '${required_text}':\n${stage73_inspect_stdout}")
+    endif()
+endforeach()
+
 set(interrupt_output "${OUTPUT_DIR}/source-interrupt.rsfw")
 execute_process(
     COMMAND "${RSMA_BUILD}" "${SOURCE_DIR}/source_interrupt.cpp" -o "${interrupt_output}"
@@ -676,6 +702,8 @@ if(NOT "${dynamic_stderr}" MATCHES "compile-time integer constant")
 endif()
 
 foreach(fixture_and_message IN ITEMS
+        "source_api_stage73_invalid_frequency.cpp|PWM frequency must be between 1 and 1000000 Hz"
+        "source_api_stage73_invalid_pwm_pin.cpp|board capability validation failed"
         "unsupported_function_parameter.cpp|function parameters currently support only int and bool"
         "fake_hal.cpp|declaration in <rsma_mcu/Arduino.h>"
         "nested_call_expression.cpp|unsupported statement")

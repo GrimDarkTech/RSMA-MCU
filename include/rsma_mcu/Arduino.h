@@ -8,13 +8,12 @@
 #define RISING 1
 #define FALLING 2
 
-extern "C" {
-
 void pinMode(int pin, int mode);
 void digitalWrite(int pin, int value);
 int digitalRead(int pin);
 int analogRead(int channel);
 void analogWrite(int pin, int duty);
+void analogWrite(int pin, int duty, int frequencyHz);
 int spiTransfer(int bus, int value);
 int i2cTransfer(int address, int value);
 int dmaTransfer(int channel, int value);
@@ -27,12 +26,11 @@ int dmaRelease(int ticket);
 int eepromRead(int address);
 void eepromWrite(int address, int value);
 unsigned long millis();
+unsigned long micros();
 void delay(unsigned int milliseconds);
 void yield();
 void attachInterrupt(int pin, void (*handler)(), int mode);
 void detachInterrupt(int pin);
-
-}
 
 class SerialPort
 {

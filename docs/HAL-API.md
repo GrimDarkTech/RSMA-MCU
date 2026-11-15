@@ -79,6 +79,10 @@ RX injection и FIFO overflow остаются
 host/backend operations; polling не продвигает simulated time без `delay()` или
 `yield()`.
 
+`Serial.read()` на пустом FIFO и переполнение FIFO являются диагностируемыми HAL
+ошибками, а не неявным значением `0`. Это позволяет source firmware отличить
+отсутствующий byte от настоящего нулевого byte.
+
 Для deterministic host input `VirtualUartBank.ScheduleReceived(port, timestamp,
 data)` планирует RX packet на абсолютное simulated time. События упорядочиваются
 по `(timestamp, insertion sequence)`, bytes одного packet сохраняют FIFO-порядок,
@@ -156,8 +160,10 @@ simulated timestamp, channel/value и optional message. Trace доступен �
 из standalone `VirtualMachine` и Unity `RSMAVirtualMicrocontroller`; переполнение
 буфера отбрасывает старые события и увеличивает `DroppedEventCount`.
 
-Source-level `millis()` использует тот же simulated clock: вызов не продвигает
-время и возвращает timestamp текущей VM точки исполнения в миллисекундах.
+Source-level `millis()` и `micros()` используют тот же simulated clock: вызов не
+продвигает время и возвращает младшие 32 бита timestamp текущей VM точки исполнения
+в миллисекундах или микросекундах. При wrap-around прошивка использует wrap-safe
+разность unsigned time values.
 После `delay()`/`WAIT` значение отражает достигнутое время, что позволяет
 строить deterministic elapsed-time control logic без зависимости от Unity frame
 timing.
@@ -167,6 +173,12 @@ Source-level IRQ API использует deterministic GPIO edge queue:
 а `detachInterrupt(pin)` удаляет только binding указанного pin. ISR возвращается
 через `RETURN_IRQ`, восстанавливая interrupted VM state/wake time. Повторный edge
 после detach не dispatch-ится; edge mask `CHANGE` соответствует rising|falling.
+
+PWM source API поддерживает `analogWrite(pin, duty)` и overload
+`analogWrite(pin, duty, frequencyHz)`. Duty имеет диапазон `0..255`, frequency
+`1..1000000` Hz и передаётся в `PwmWriteFrequency` HAL service. Pin должен иметь
+`Pwm` capability и `PWM` alternate route; native validator и Unity backend
+проверяют это до первого VM tick.
 
 ## 6. Целевой контракт sensor/control platform
 

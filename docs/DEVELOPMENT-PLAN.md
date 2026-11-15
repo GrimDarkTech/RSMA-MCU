@@ -227,8 +227,15 @@ HAL service/bytecode lowering, runtime implementation, board capability check,
 source example и negative test. Сейчас PWM, IRQ и UART частично существуют в
 runtime/bytecode, но не образуют полного пользовательского C++-контракта.
 
-Критерий: пользователь может собрать sensor/control firmware без ручного
-bytecode, reflection или C#-only calls.
+Реализовано: `Arduino.h`, libclang builder, native validator, RSFW v1 HAL и
+Unity runtime согласованы для source-level PWM (duty/frequency/capability), IRQ
+(rising/falling/change), `millis`/`micros`, `Serial` polling, `configurePin` и
+диагностируемых UART FIFO errors. `main()` документирован как scheduler-friendly
+замена `setup()`/`loop()` через `delay()`/`yield()`. Positive/negative source
+fixtures проверяют lowering и compile-time/board-capability diagnostics.
+
+Критерий закрыт для поддержанного source subset: пользователь может собрать
+sensor/control firmware без ручного bytecode, reflection или C#-only calls.
 
 ### 7.4. ADC и модели аналоговых датчиков — P0/P1
 
