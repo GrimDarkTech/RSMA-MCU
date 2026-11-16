@@ -797,6 +797,32 @@ foreach(required_text "HAL_CALL" "Peripherals: I2C SPI")
     endif()
 endforeach()
 
+set(i2c_temperature_fan_output "${OUTPUT_DIR}/i2c-temperature-fan.rsfw")
+execute_process(
+    COMMAND "${RSMA_BUILD}" "${SOURCE_DIR}/i2c_temperature_fan.cpp" -o "${i2c_temperature_fan_output}"
+    RESULT_VARIABLE i2c_temperature_fan_result
+    OUTPUT_VARIABLE i2c_temperature_fan_stdout
+    ERROR_VARIABLE i2c_temperature_fan_stderr
+)
+if(NOT i2c_temperature_fan_result EQUAL 0)
+    message(FATAL_ERROR "rsma-build rejected I2C temperature/fan fixture:\n${i2c_temperature_fan_stdout}\n${i2c_temperature_fan_stderr}")
+endif()
+execute_process(
+    COMMAND "${RSMA_INSPECT}" "${i2c_temperature_fan_output}"
+    RESULT_VARIABLE i2c_temperature_fan_inspect_result
+    OUTPUT_VARIABLE i2c_temperature_fan_inspect_stdout
+    ERROR_VARIABLE i2c_temperature_fan_inspect_stderr
+)
+if(NOT i2c_temperature_fan_inspect_result EQUAL 0)
+    message(FATAL_ERROR "I2C temperature/fan firmware is invalid:\n${i2c_temperature_fan_inspect_stderr}")
+endif()
+foreach(required_text "HAL_CALL" "WAIT" "Peripherals: GPIO I2C PWM SYSTICK UART")
+    string(FIND "${i2c_temperature_fan_inspect_stdout}" "${required_text}" i2c_temperature_fan_text_index)
+    if(i2c_temperature_fan_text_index EQUAL -1)
+        message(FATAL_ERROR "I2C temperature/fan firmware is missing '${required_text}':\n${i2c_temperature_fan_inspect_stdout}")
+    endif()
+endforeach()
+
 set(invalid_output "${OUTPUT_DIR}/unsupported.rsfw")
 execute_process(
     COMMAND "${RSMA_BUILD}" "${SOURCE_DIR}/unsupported_loop.cpp" -o "${invalid_output}"

@@ -125,6 +125,12 @@ invalid ticket, premature read, invalid result offset и release до completion
 публикуют deterministic `VirtualDmaDiagnostic` и завершаются explicit error.
 `ResetDma` отменяет unreleased transfers и очищает staging state; EEPROM при
 этом сохраняется до явного `ClearStorage()`.
+
+Полный source-level пример `examples/i2c_temperature_fan.cpp` комбинирует
+register-level I2C read, integer calibration/filter, PWM duty selection и
+UART telemetry в scheduler-friendly `while` loop с `delay(10)`. Это первый
+поддержанный end-to-end bus sensor/control slice; его native fixture и Unity
+PlayMode acceptance проверяют positive output trace и NACK fault path.
 Поддерживаются глобальные пользовательские `int`/`void` функции с параметрами и
 локальными переменными типов `int`/`bool`. Аргументы и `int`-результат передаются
 через VM value stack; вызовы компилируются в `CALL`, возвраты — в `RETURN`. VM

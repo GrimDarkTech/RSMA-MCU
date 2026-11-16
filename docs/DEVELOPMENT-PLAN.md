@@ -417,6 +417,13 @@ active/queued/complete transfers, очищает staging buffers и diagnostics 
 3. `I2C temperature sensor -> calibration/filter -> fan PWM -> UART telemetry`.
 4. `SPI encoder -> position control -> motor driver -> fault input`.
 
+Первый bus-to-actuator vertical slice добавлен: `examples/i2c_temperature_fan.cpp`
+читает I2C register `0x48/0x10`, выполняет integer calibration/filter,
+управляет PWM fan на pin 13 и передаёт filtered temperature через `Serial`.
+Native builder/inspect fixture проверяет требуемые GPIO/I2C/PWM/UART/SYSTICK,
+Unity PlayMode acceptance проверяет PWM/telemetry trace, а NACK sensor проверяет
+VM fault, `I2C_NACK` diagnostic и safe fan output.
+
 Для каждого среза нужны source `.cpp`, generated `.rsfw`, Unity scene fixture,
 EditMode/PlayMode tests, expected event/output trace и negative cases. В CI
 должны выполняться builder/validator, native CTest, Unity EditMode и выбранные

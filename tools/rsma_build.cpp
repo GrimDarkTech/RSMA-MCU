@@ -446,6 +446,35 @@ void emit_expression(CXCursor cursor, BodyContext& context)
                 context.peripherals->emplace_back("DMA");
                 return;
             }
+            if (function.name == "spiReadRegister" || function.name == "i2cReadRegister") {
+                if (argumentCount != (function.name == "spiReadRegister" ? 3 : 2))
+                    fail_at(cursor, function.name + " expects route and register arguments");
+                const auto route = constant_integer(clang_Cursor_getArgument(cursor, 0));
+                const auto registerArgumentIndex = function.name == "spiReadRegister" ? 2 : 1;
+                const auto registerAddress = constant_integer(
+                    clang_Cursor_getArgument(cursor, registerArgumentIndex));
+                Byte encodedRoute = 0;
+                if (function.name == "spiReadRegister") {
+                    const auto chipSelect = constant_integer(clang_Cursor_getArgument(cursor, 1));
+                    if (route < 0 || route > 15 || chipSelect < 0 || chipSelect > 15)
+                        fail_at(clang_Cursor_getArgument(cursor, 0),
+                            "SPI bus and chip-select must be between 0 and 15");
+                    encodedRoute = static_cast<Byte>((route << 4) | chipSelect);
+                } else {
+                    if (route < 0 || route > 0x7F)
+                        fail_at(clang_Cursor_getArgument(cursor, 0),
+                            "I2C address must be between 0 and 127");
+                    encodedRoute = static_cast<Byte>(route);
+                }
+                if (registerAddress < 0 || registerAddress > 0xFF)
+                    fail_at(clang_Cursor_getArgument(cursor, registerArgumentIndex),
+                        "register address must be between 0 and 255");
+                append_hal_call(*context.program,
+                    function.name == "spiReadRegister" ? HalService::SpiReadRegister : HalService::I2cReadRegister,
+                    encodedRoute, static_cast<Byte>(registerAddress));
+                context.peripherals->emplace_back(function.name == "spiReadRegister" ? "SPI" : "I2C");
+                return;
+            }
             if (function.name == "dmaSubmit") {
                 if (argumentCount != 3)
                     fail_at(cursor, "dmaSubmit expects channel, buffer and length arguments");

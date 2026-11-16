@@ -246,6 +246,16 @@ tickets; `dmaRelease(ticket)` освобождает slot только посл�
 exception вместо silent data corruption. `ResetDma` отменяет все tickets,
 очищает staging buffers/diagnostics и сбрасывает allocator.
 
+### End-to-end temperature/fan slice
+
+`examples/i2c_temperature_fan.cpp` демонстрирует поддерживаемый путь
+`i2cReadRegister(0x48, 0x10) -> calibration/filter -> analogWrite(13, duty) ->
+Serial.write(filtered)`. Sensor data остаётся register-level I2C byte data;
+firmware выполняет integer filter и output trace наблюдаем через PWM state и
+UART transmit events. Missing/NACK sensor не превращается в нулевой sample:
+VM fault фиксируется до следующего control-loop tick, bus публикует `I2C_NACK`,
+а backend safe-state оставляет fan output выключенным.
+
 Для полноценной разработки прикладной системы HAL должен описывать не только
 отдельные функции, но и сквозную границу `firmware -> VM -> board profile ->
 Emulator backend -> scene peripheral`. Один и тот же `.rsfw` должен иметь
