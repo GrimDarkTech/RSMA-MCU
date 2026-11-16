@@ -272,17 +272,21 @@ serialWrite(port, value);
 
 ### Device buses
 
-`spiTransfer(bus, value)` и `i2cTransfer(address, value)` остаются минимальным
-byte-level compatibility layer. Для sensor drivers потребуются transaction-level
-API и virtual devices:
+`spiTransfer(bus, value)` и `i2cTransfer(address, value)` сохраняются как
+byte-level compatibility layer. Register-level API предоставляет:
 
 - I2C register address, multi-byte read/write, ACK/NACK, device presence,
   repeated START, bus speed и timeout;
 - SPI device/chip-select, transaction boundary, CPOL/CPHA, bit order, speed и
   full-duplex buffer;
-- register-map device model, reset state, configurable response и fault
-  injection;
-- единый device/bus mapping в board profile и Unity scene.
+- `VirtualI2cDevice(address)` с register map, multi-byte transaction, repeated
+  START, ACK/NACK, clock stretch и timeout;
+- `VirtualSpiDevice(bus, chipSelect)` с transaction boundary, register command,
+  `VirtualSpiMode` (CPOL/CPHA), `VirtualBitOrder`, speed и timeout;
+- `VirtualBusBank` с deterministic device mapping, reset snapshot, bus time,
+  `I2C_NACK`/`SPI_NACK`/`I2C_TIMEOUT`/`SPI_TIMEOUT` diagnostics и Unity endpoint;
+- source-level `i2cReadRegister`/`i2cWriteRegister` и
+  `spiReadRegister`/`spiWriteRegister`.
 
 ### Errors, timing и lifecycle
 

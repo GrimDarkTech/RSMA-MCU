@@ -771,6 +771,32 @@ foreach(required_text "HAL_CALL" "WAIT" "Peripherals: UART SYSTICK")
     endif()
 endforeach()
 
+set(register_bus_output "${OUTPUT_DIR}/register-bus.rsfw")
+execute_process(
+    COMMAND "${RSMA_BUILD}" "${SOURCE_DIR}/register_bus.cpp" -o "${register_bus_output}"
+    RESULT_VARIABLE register_bus_result
+    OUTPUT_VARIABLE register_bus_stdout
+    ERROR_VARIABLE register_bus_stderr
+)
+if(NOT register_bus_result EQUAL 0)
+    message(FATAL_ERROR "rsma-build rejected register-level bus fixture:\n${register_bus_stdout}\n${register_bus_stderr}")
+endif()
+execute_process(
+    COMMAND "${RSMA_INSPECT}" "${register_bus_output}"
+    RESULT_VARIABLE register_bus_inspect_result
+    OUTPUT_VARIABLE register_bus_inspect_stdout
+    ERROR_VARIABLE register_bus_inspect_stderr
+)
+if(NOT register_bus_inspect_result EQUAL 0)
+    message(FATAL_ERROR "register-level bus firmware is invalid:\n${register_bus_inspect_stderr}")
+endif()
+foreach(required_text "HAL_CALL" "Peripherals: I2C SPI")
+    string(FIND "${register_bus_inspect_stdout}" "${required_text}" register_bus_text_index)
+    if(register_bus_text_index EQUAL -1)
+        message(FATAL_ERROR "register-level bus firmware is missing '${required_text}':\n${register_bus_inspect_stdout}")
+    endif()
+endforeach()
+
 set(invalid_output "${OUTPUT_DIR}/unsupported.rsfw")
 execute_process(
     COMMAND "${RSMA_BUILD}" "${SOURCE_DIR}/unsupported_loop.cpp" -o "${invalid_output}"

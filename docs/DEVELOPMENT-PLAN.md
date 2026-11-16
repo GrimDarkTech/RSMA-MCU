@@ -364,6 +364,20 @@ source -> RSFW -> VM -> simulated transport path.
 registers через C++ API, а missing device, NACK, timeout и malformed transfer
 дают диагностируемый результат.
 
+Реализовано: `VirtualBusBank` предоставляет единый register-level bus contract
+для standalone VM и Unity backend. `VirtualI2cDevice` использует 7-bit address,
+256-byte register map, multi-byte read/write, repeated-START transaction flag,
+ACK/NACK, configurable clock stretching и timeout. `VirtualSpiDevice` использует
+bus/chip-select mapping, transaction boundaries, register command byte, CPOL/CPHA
+через `VirtualSpiMode`, MSB/LSB bit order и configurable speed/timeout.
+
+Transaction timing продвигает simulated bus clock; missing/present=false или
+NACK device возвращает failure и diagnostic без неявного успешного нулевого
+ответа. Reset восстанавливает register maps из reset snapshot, очищает bus time
+и diagnostics. Source-level helpers `i2cReadRegister`, `i2cWriteRegister`,
+`spiReadRegister` и `spiWriteRegister` понижаются в новые HAL services, при этом
+старые byte-level `i2cTransfer`/`spiTransfer` остаются compatibility API.
+
 ### 7.9. EEPROM, DMA и периферийные error contracts — P1
 
 - Уточнить persistent storage ownership, save/load/reset и scene serialization

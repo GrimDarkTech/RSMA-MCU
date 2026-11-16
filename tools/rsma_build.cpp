@@ -395,6 +395,8 @@ void emit_expression(CXCursor cursor, BodyContext& context)
         }
         if (function.name == "digitalRead" || function.name == "analogRead" ||
             function.name == "spiTransfer" || function.name == "i2cTransfer" ||
+            function.name == "spiReadRegister" || function.name == "spiWriteRegister" ||
+            function.name == "i2cReadRegister" || function.name == "i2cWriteRegister" ||
             function.name == "dmaTransfer" || function.name == "eepromRead" ||
             function.name == "dmaBufferRead" || function.name == "dmaSubmit" ||
             function.name == "dmaStatus" || function.name == "dmaReadByte" ||
@@ -702,7 +704,8 @@ void lower_call(CXCursor cursor, BodyContext& context)
     const bool halName = name == "pinMode" || name == "digitalWrite" ||
         name == "digitalRead" || name == "analogRead" || name == "analogWrite" ||
         name == "spiTransfer" ||
-        name == "i2cTransfer" || name == "dmaTransfer" || name == "eepromRead" ||
+        name == "i2cTransfer" || name == "spiReadRegister" || name == "spiWriteRegister" ||
+        name == "i2cReadRegister" || name == "i2cWriteRegister" || name == "dmaTransfer" || name == "eepromRead" ||
         name == "eepromWrite" || name == "dmaBufferWrite" || name == "dmaBufferRead" ||
         name == "dmaSubmit" || name == "dmaStatus" || name == "dmaReadByte" ||
         name == "dmaRelease" || name == "millis" || name == "micros" || name == "delay" || name == "yield" ||
@@ -1045,6 +1048,44 @@ void lower_call(CXCursor cursor, BodyContext& context)
         emit_expression(argument(2), context);
         append_hal_call(program, HalService::DmaBufferWrite, buffer, offset);
         peripherals.emplace_back("DMA");
+        return;
+    }
+    if (name == "spiReadRegister" || name == "spiWriteRegister" ||
+        name == "i2cReadRegister" || name == "i2cWriteRegister") {
+        if (name == "spiReadRegister" || name == "i2cReadRegister") {
+            if (argumentCount != (name == "spiReadRegister" ? 3 : 2))
+                fail_at(cursor, name + " expects route and register arguments");
+        } else {
+            if (argumentCount != (name == "spiWriteRegister" ? 4 : 3))
+                fail_at(cursor, name + " expects route, register and value arguments");
+        }
+        const auto route = constant_integer(argument(0));
+        const auto registerArgumentIndex = name.find("spi") == 0 ? 2 : 1;
+        const auto registerAddress = constant_integer(argument(registerArgumentIndex));
+        if (name.find("spi") == 0) {
+            const auto chipSelect = constant_integer(argument(1));
+            if (route < 0 || route > 15 || chipSelect < 0 || chipSelect > 15)
+                fail_at(argument(0), "SPI bus and chip-select must be between 0 and 15");
+        } else if (route < 0 || route > 0x7F) {
+            fail_at(argument(0), "I2C address must be between 0 and 127");
+        }
+        if (registerAddress < 0 || registerAddress > 0xFF)
+            fail_at(argument(registerArgumentIndex), "register address must be between 0 and 255");
+        const auto encodedRoute = name.find("spi") == 0
+            ? static_cast<Byte>((route << 4) | constant_integer(argument(1)))
+            : static_cast<Byte>(route);
+        if (name == "spiReadRegister" || name == "i2cReadRegister") {
+            append_hal_call(program,
+                name == "spiReadRegister" ? HalService::SpiReadRegister : HalService::I2cReadRegister,
+                encodedRoute, static_cast<Byte>(registerAddress));
+        } else {
+            const auto valueArgumentIndex = name.find("spi") == 0 ? 3 : 2;
+            emit_expression(argument(valueArgumentIndex), context);
+            append_hal_call(program,
+                name == "spiWriteRegister" ? HalService::SpiWriteRegister : HalService::I2cWriteRegister,
+                encodedRoute, static_cast<Byte>(registerAddress));
+        }
+        peripherals.emplace_back(name.find("spi") == 0 ? "SPI" : "I2C");
         return;
     }
     if (name == "spiTransfer" || name == "i2cTransfer" || name == "dmaTransfer") {

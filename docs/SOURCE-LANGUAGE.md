@@ -86,6 +86,14 @@ FIFO byte отбрасывается с backend diagnostic/lost-byte counter. `r
 как compile-time integer и TX byte как runtime expression; они понижаются в
 stack-based `HAL_CALL`, возвращая RX byte как `int`. SPI bus ограничен `0..255`,
 I2C address ограничен `0..127`.
+Register-level helpers принимают compile-time route/register arguments:
+`i2cReadRegister(address, register)`, `i2cWriteRegister(address, register, value)`,
+`spiReadRegister(bus, chipSelect, register)` и
+`spiWriteRegister(bus, chipSelect, register, value)`. I2C address/register и
+SPI bus/chip-select/register валидируются builder-ом; read возвращает `int`,
+write принимает runtime byte expression. Runtime device absence, NACK и timeout
+приводят к диагностируемому VM fault, а compatibility byte-level calls сохраняют
+прежнюю семантику.
 Synchronous DMA API `dmaTransfer(channel, value)` сохраняется для обмена одним
 byte. Bounded asynchronous DMA использует четыре staging buffers по 256 byte и
 очередь до 16 незакрытых transfers: `dmaBufferWrite(buffer, offset, value)` и

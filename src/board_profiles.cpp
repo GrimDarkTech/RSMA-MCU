@@ -195,6 +195,13 @@ ValidationResult validate_firmware_pin_usage(const FirmwarePackage& package, con
             if (!has_capability(pin->capabilities, PinCapability::Analog) || !has_alternate(*pin, "ADC"))
                 return ValidationResult::failure("firmware ADC call references a pin without ADC route");
             break;
+        case HalService::SpiReadRegister:
+        case HalService::SpiWriteRegister:
+        case HalService::I2cReadRegister:
+        case HalService::I2cWriteRegister:
+            // Register-level bus routes are validated by the bus/device mapping;
+            // these HAL calls do not consume a GPIO pin operand.
+            break;
         default:
             break;
         }
