@@ -816,7 +816,7 @@ execute_process(
 if(NOT i2c_temperature_fan_inspect_result EQUAL 0)
     message(FATAL_ERROR "I2C temperature/fan firmware is invalid:\n${i2c_temperature_fan_inspect_stderr}")
 endif()
-foreach(required_text "HAL_CALL" "WAIT" "Peripherals: GPIO I2C PWM SYSTICK UART")
+foreach(required_text "HAL_CALL" "WAIT" "Peripherals: GPIO UART I2C PWM SYSTICK")
     string(FIND "${i2c_temperature_fan_inspect_stdout}" "${required_text}" i2c_temperature_fan_text_index)
     if(i2c_temperature_fan_text_index EQUAL -1)
         message(FATAL_ERROR "I2C temperature/fan firmware is missing '${required_text}':\n${i2c_temperature_fan_inspect_stdout}")

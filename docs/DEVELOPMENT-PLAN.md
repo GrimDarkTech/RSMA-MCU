@@ -424,6 +424,14 @@ Native builder/inspect fixture проверяет требуемые GPIO/I2C/PW
 Unity PlayMode acceptance проверяет PWM/telemetry trace, а NACK sensor проверяет
 VM fault, `I2C_NACK` diagnostic и safe fan output.
 
+Этап 7.10 завершён для первого среза: `VirtualTraceJsonExporter` экспортирует
+bounded deterministic trace в стабильный JSON с sequence, simulated timestamp,
+event kind, channels, values и escaped message; `RSMAVirtualMicrocontroller`
+и `VirtualMachine` предоставляют этот export для CI/Unity artifacts. Скрипт
+`rsma-mcu/tests/run_validation.ps1` воспроизводимо запускает native build/CTest,
+managed builds и optional Unity EditMode/PlayMode batch suites. Positive trace,
+NACK fault/safe-state и generated RSFW покрыты acceptance tests.
+
 Для каждого среза нужны source `.cpp`, generated `.rsfw`, Unity scene fixture,
 EditMode/PlayMode tests, expected event/output trace и negative cases. В CI
 должны выполняться builder/validator, native CTest, Unity EditMode и выбранные
