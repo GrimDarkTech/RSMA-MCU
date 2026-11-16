@@ -118,6 +118,13 @@ EEPROM-подобное storage предоставляет `eepromRead(address)`
 Read возвращает byte на VM stack, write снимает byte со stack. Storage принадлежит
 HAL backend, поэтому сохраняется между `VirtualMachine.Reset()` и очищается только
 явной backend-операцией reset/clear.
+Async DMA error contract не возвращает неявные данные: `dmaSubmit` возвращает
+ticket, `-2` означает bounded queue full, а `dmaStatus` различает queued,
+active, complete и invalid. `dmaReadByte` разрешён только после completion;
+invalid ticket, premature read, invalid result offset и release до completion
+публикуют deterministic `VirtualDmaDiagnostic` и завершаются explicit error.
+`ResetDma` отменяет unreleased transfers и очищает staging state; EEPROM при
+этом сохраняется до явного `ClearStorage()`.
 Поддерживаются глобальные пользовательские `int`/`void` функции с параметрами и
 локальными переменными типов `int`/`bool`. Аргументы и `int`-результат передаются
 через VM value stack; вызовы компилируются в `CALL`, возвраты — в `RETURN`. VM

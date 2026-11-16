@@ -228,6 +228,24 @@ signed range `-1..1`.
 
 ## 6. Целевой контракт sensor/control platform
 
+### EEPROM и DMA error contract
+
+EEPROM является persistent backend storage: `VirtualMachine.Reset()` и обычный
+peripheral reset не стирают данные. `ClearStorage()` — явная host/backend
+операция очистки; scene serialization должна владеть сохранением содержимого,
+а firmware не должна предполагать reset-to-zero.
+
+DMA использует statuses `INVALID=-1`, `QUEUED=0`, `ACTIVE=1`, `COMPLETE=2`.
+Все unreleased tickets занимают bounded queue slot, в том числе completed
+tickets; `dmaRelease(ticket)` освобождает slot только после completion. При
+переполнении `dmaSubmit` возвращает `DmaQueueFull` (`-2`) и публикует
+`DMA_QUEUE_FULL`. Ошибки публикуются через `VirtualDmaDiagnostic` с кодами
+`DMA_INVALID_CHANNEL`, `DMA_INVALID_LENGTH`, `DMA_INVALID_TIMING`,
+`DMA_RESULT_NOT_READY`, `DMA_RESULT_OFFSET` и
+`DMA_RELEASE_INVALID`; invalid argument operations также завершаются explicit
+exception вместо silent data corruption. `ResetDma` отменяет все tickets,
+очищает staging buffers/diagnostics и сбрасывает allocator.
+
 Для полноценной разработки прикладной системы HAL должен описывать не только
 отдельные функции, но и сквозную границу `firmware -> VM -> board profile ->
 Emulator backend -> scene peripheral`. Один и тот же `.rsfw` должен иметь

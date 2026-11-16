@@ -393,6 +393,18 @@ NACK device возвращает failure и diagnostic без неявного �
 Критерий: каждая ошибка имеет документированный status/message, deterministic
 test и безопасное поведение actuator outputs.
 
+Инкремент завершён для текущего EEPROM/DMA v1 contract: EEPROM принадлежит
+backend storage, сохраняется через `VirtualMachine.Reset()` и peripheral reset,
+а `ClearStorage()` является единственной явной операцией очистки. DMA status
+остаётся `INVALID/QUEUED/ACTIVE/COMPLETE`; capacity включает все unreleased
+tickets, включая completion, а `DmaRelease` освобождает слот только после
+completion. Queue full возвращает `DmaQueueFull` и публикует `DMA_QUEUE_FULL`.
+Invalid channel/length/timing, read до completion,
+out-of-range result offset и release неготового/невалидного ticket публикуют
+typed `VirtualDmaDiagnostic` с deterministic code/message. `ResetDma` отменяет
+active/queued/complete transfers, очищает staging buffers и diagnostics и
+сбрасывает ticket allocator.
+
 ### 7.10. End-to-end examples, observability и CI — P0/P1
 
 Добавить реальные прикладные вертикальные срезы:
